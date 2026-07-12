@@ -9,8 +9,10 @@ from pulda.db import init_db
 from pulda.classifier import classify
 from pulda.service import (
     create_event, list_events, update_status, build_review, update_event, defer_event,
-    get_event, delete_event, context_workspace, add_attachment,
+    get_event, delete_event, context_workspace, add_attachment, group_events_by_date,
 )
+from pulda.timeutil import date_label, today_kst
+from datetime import timedelta
 
 def setup_module():
     p = Path("data/test-pulda.db")
@@ -121,3 +123,24 @@ def test_download_attachment_sets_security_headers():
     assert dl.status_code == 200
     assert dl.headers["x-content-type-options"] == "nosniff"
     assert "attachment" in dl.headers["content-disposition"]
+
+def test_date_label_relative_wording():
+    # CR-0009: the "전체 Event" log must read like an activity log
+    # (오늘/어제/N일 전), not a flat pile of undated rows.
+    today = today_kst()
+    assert date_label(today.isoformat(), today) == "오늘"
+    assert date_label((today - timedelta(days=1)).isoformat(), today) == "어제"
+    assert date_label((today - timedelta(days=3)).isoformat(), today) == "3일 전"
+    old = today - timedelta(days=30)
+    assert date_label(old.isoformat(), today) == f"{old.month}월 {old.day}일"
+
+def test_group_events_by_date_buckets_and_preserves_order():
+    events = [
+        {"id": 1, "created_at": "2026-07-12T16:08:00"},
+        {"id": 2, "created_at": "2026-07-12T15:32:00"},
+        {"id": 3, "created_at": "2026-07-11T09:21:00"},
+    ]
+    groups = group_events_by_date(events)
+    assert [g["date"] for g in groups] == ["2026-07-12", "2026-07-11"]
+    assert [e["id"] for e in groups[0]["events"]] == [1, 2]
+    assert [e["id"] for e in groups[1]["events"]] == [3]

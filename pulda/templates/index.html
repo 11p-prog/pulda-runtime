@@ -288,6 +288,9 @@
                   {{ status_labels[e.status] }}
                 </span>
                 <span class="text-[14px] text-on-surface truncate">{{ e.text }}</span>
+                {% if e.attachments %}
+                <span class="material-symbols-outlined text-[15px] text-on-surface-variant/50 shrink-0" title="첨부 {{ e.attachments|length }}개">attach_file</span>
+                {% endif %}
               </div>
               <span class="text-[11px] text-on-surface-variant/50 shrink-0">{{ e.created_at[11:16] if e.created_at|length > 11 else e.created_at }}</span>
             </summary>
@@ -295,6 +298,15 @@
               <span>컨텍스트: {{ e.role }} / {{ e.area }}{% if e.project %} · {{ e.project }}{% endif %}</span>
               <span>기록 시각: {{ e.created_at }}</span>
               <span>중요/긴급: {{ e.importance }}/{{ e.urgency }}</span>
+              {% if e.attachments %}
+              <span class="w-full flex flex-wrap gap-2 mt-1">
+                {% for a in e.attachments %}
+                <a href="/attachments/{{ a.id }}" target="_blank" class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-surface-container-low text-primary hover:underline">
+                  <span class="material-symbols-outlined text-[13px]">attach_file</span>{{ a.original_name }}
+                </a>
+                {% endfor %}
+              </span>
+              {% endif %}
             </div>
           </details>
           {% else %}
@@ -309,7 +321,7 @@
         <div class="overflow-x-auto rounded-xl border border-outline-variant/10">
           <table class="w-full text-[13px]">
             <thead class="bg-surface-container-low text-on-surface-variant/70">
-              <tr><th class="text-left p-3 font-medium">내용</th><th class="text-left p-3 font-medium">역할/영역</th><th class="text-left p-3 font-medium">중요/긴급</th><th class="text-left p-3 font-medium">상태</th></tr>
+              <tr><th class="text-left p-3 font-medium">내용</th><th class="text-left p-3 font-medium">역할/영역</th><th class="text-left p-3 font-medium">중요/긴급</th><th class="text-left p-3 font-medium">상태</th><th class="text-left p-3 font-medium">첨부</th></tr>
             </thead>
             <tbody>
               {% for e in events %}
@@ -318,6 +330,13 @@
                 <td class="p-3 text-on-surface-variant/70">{{ e.role }} / {{ e.area }}</td>
                 <td class="p-3 text-on-surface-variant/70">{{ e.importance }}/{{ e.urgency }}</td>
                 <td class="p-3">{{ status_labels[e.status] }}</td>
+                <td class="p-3">
+                  {% for a in e.attachments %}
+                  <a href="/attachments/{{ a.id }}" target="_blank" class="inline-flex items-center gap-1 text-primary hover:underline mr-2" title="{{ a.original_name }}">
+                    <span class="material-symbols-outlined text-[15px]">attach_file</span>
+                  </a>
+                  {% endfor %}
+                </td>
               </tr>
               {% endfor %}
             </tbody>
@@ -404,16 +423,30 @@
       {% for t in tabs %}{% if t.ctx == ctx %}지금 기록하면 <b class="text-primary font-medium">{{ t.label }}</b>에 저장됩니다{% endif %}{% endfor %}
     </span>
     {% endif %}
-    <form method="post" action="/capture" id="capture-bar-form"
-      class="pointer-events-auto w-full max-w-2xl bg-surface-container-lowest/95 glass-blur rounded-[1.5rem] shadow-[0_12px_40px_rgba(0,0,0,0.14)] border border-outline-variant/10 p-2 flex items-end gap-2">
-      <input type="hidden" name="ctx" value="{{ ctx }}"/>
-      <textarea name="text" id="capture-bar-input" required rows="1"
-        class="flex-1 resize-none bg-transparent border-none text-[15px] leading-relaxed px-3 py-2.5 focus:ring-0 focus:outline-none placeholder-on-surface-variant/40 max-h-40"
-        placeholder="지금 떠오른 것을 적어보세요."></textarea>
-      <button type="submit" aria-label="Event 기록"
-        class="shrink-0 w-10 h-10 flex items-center justify-center bg-primary text-on-primary rounded-full hover:scale-105 transition-transform active:scale-95 mb-0.5">
-        <span class="material-symbols-outlined text-xl">arrow_upward</span>
-      </button>
+    <form method="post" action="/capture" id="capture-bar-form" enctype="multipart/form-data"
+      class="pointer-events-auto w-full max-w-2xl bg-surface-container-lowest/95 glass-blur rounded-[1.5rem] shadow-[0_12px_40px_rgba(0,0,0,0.14)] border border-outline-variant/10 p-2 flex flex-col gap-1">
+      <div id="capture-file-preview" class="hidden items-center gap-2 px-3 pt-1 text-[12px] text-on-surface-variant/70">
+        <span class="material-symbols-outlined text-[15px]">attach_file</span>
+        <span id="capture-file-name" class="truncate flex-1"></span>
+        <button type="button" id="capture-file-clear" aria-label="첨부 제거" class="text-on-surface-variant/50 hover:text-error">
+          <span class="material-symbols-outlined text-[15px]">close</span>
+        </button>
+      </div>
+      <div class="flex items-end gap-2">
+        <input type="hidden" name="ctx" value="{{ ctx }}"/>
+        <input type="file" name="file" id="capture-file-input" class="hidden" accept=".pdf,.png,.jpg,.jpeg,.heic,.webp,.gif"/>
+        <button type="button" id="capture-file-trigger" aria-label="파일 첨부 (PDF/사진)"
+          class="shrink-0 w-10 h-10 flex items-center justify-center text-on-surface-variant/60 hover:text-primary hover:bg-primary/5 rounded-full transition-colors mb-0.5">
+          <span class="material-symbols-outlined text-xl">attach_file</span>
+        </button>
+        <textarea name="text" id="capture-bar-input" required rows="1"
+          class="flex-1 resize-none bg-transparent border-none text-[15px] leading-relaxed px-1 py-2.5 focus:ring-0 focus:outline-none placeholder-on-surface-variant/40 max-h-40"
+          placeholder="지금 떠오른 것을 적어보세요."></textarea>
+        <button type="submit" aria-label="Event 기록"
+          class="shrink-0 w-10 h-10 flex items-center justify-center bg-primary text-on-primary rounded-full hover:scale-105 transition-transform active:scale-95 mb-0.5">
+          <span class="material-symbols-outlined text-xl">arrow_upward</span>
+        </button>
+      </div>
     </form>
   </div>
 </div>
@@ -422,6 +455,24 @@
   var ta = document.getElementById('capture-bar-input');
   var form = document.getElementById('capture-bar-form');
   if (!ta || !form) return;
+  var fileInput = document.getElementById('capture-file-input');
+  var fileTrigger = document.getElementById('capture-file-trigger');
+  var filePreview = document.getElementById('capture-file-preview');
+  var fileName = document.getElementById('capture-file-name');
+  var fileClear = document.getElementById('capture-file-clear');
+  fileTrigger.addEventListener('click', function () { fileInput.click(); });
+  fileInput.addEventListener('change', function () {
+    if (fileInput.files && fileInput.files.length) {
+      fileName.textContent = fileInput.files[0].name;
+      filePreview.classList.remove('hidden');
+      filePreview.classList.add('flex');
+    }
+  });
+  fileClear.addEventListener('click', function () {
+    fileInput.value = '';
+    filePreview.classList.add('hidden');
+    filePreview.classList.remove('flex');
+  });
   function resize() {
     ta.style.height = 'auto';
     ta.style.height = Math.min(ta.scrollHeight, 160) + 'px';

@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from .db import init_db
 from .service import (
     create_event, list_events, update_status, today_plan, build_review, latest_review, health,
-    get_event, update_event, defer_event, attention_items,
+    get_event, update_event, defer_event, attention_items, delete_event,
     life_balance, decision_support, operations_summary, save_reflection,
     CONTEXT_TABS, distinct_projects, context_workspace, calendar_activity, review_for_date,
     add_attachment, get_attachment,
@@ -130,6 +130,20 @@ def index(request: Request, ctx: str = "today", cal_date: str | None = None):
 
 ATTACHMENT_DIR = Path(settings.attachment_dir)
 
+# Server-side allow-list — the UI's `accept` attribute only hints the file
+# picker; it does not stop a direct POST from uploading anything. Audit
+# finding #4: without this, an attacker could upload arbitrary file types
+# (e.g. .html/.js) that browsers may render/execute on download.
+ALLOWED_ATTACHMENT_EXTENSIONS = {".pdf", ".png", ".jpg", ".jpeg", ".heic", ".webp", ".gif"}
+ALLOWED_ATTACHMENT_MIME_PREFIXES = ("image/", "application/pdf")
+
+def _validate_upload(file: UploadFile) -> None:
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in ALLOWED_ATTACHMENT_EXTENSIONS:
+        raise HTTPException(400, f"허용되지 않는 파일 형식입니다: {suffix or '(확장자 없음)'}")
+    if file.content_type and not file.content_type.startswith(ALLOWED_ATTACHMENT_MIME_PREFIXES):
+        raise HTTPException(400, f"허용되지 않는 파일 형식입니다: {file.content_type}")
+
 def _save_upload(file: UploadFile) -> tuple[str, int]:
     """Stream an uploaded file to disk under a random name (never trust the
     client-supplied filename for the path) and return (stored_name, size).
@@ -140,14 +154,16 @@ def _save_upload(file: UploadFile) -> tuple[str, int]:
     dest = ATTACHMENT_DIR / stored_name
     max_bytes = settings.max_attachment_mb * 1024 * 1024
     size = 0
-    with open(dest, "wb") as out:
-        while chunk := file.file.read(1024 * 1024):
-            size += len(chunk)
-            if size > max_bytes:
-                out.close()
-                dest.unlink(missing_ok=True)
-                raise HTTPException(413, f"파일이 너무 큽니다 (최대 {settings.max_attachment_mb}MB)")
-            out.write(chunk)
+    try:
+        with open(dest, "wb") as out:
+            while chunk := file.file.read(1024 * 1024):
+                size += len(chunk)
+                if size > max_bytes:
+                    raise HTTPException(413, f"파일이 너무 큽니다 (최대 {settings.max_attachment_mb}MB)")
+                out.write(chunk)
+    except HTTPException:
+        dest.unlink(missing_ok=True)
+        raise
     return stored_name, size
 
 @app.post("/capture")
@@ -165,8 +181,17 @@ def capture(text: str = Form(...), ctx: str = Form("today"), file: UploadFile | 
         role_override = ctx.split(":", 1)[1]
     event_id = create_event(text.strip(), role_override=role_override, **extra)
     if file is not None and file.filename:
-        stored_name, size = _save_upload(file)
-        add_attachment(event_id, file.filename, stored_name, file.content_type, size)
+        # Event and attachment aren't in a single DB transaction (attachment
+        # writes hit the filesystem too), so on any upload failure the Event
+        # is explicitly rolled back here rather than left as an orphan
+        # empty capture (CR-0007 audit finding #3).
+        try:
+            _validate_upload(file)
+            stored_name, size = _save_upload(file)
+            add_attachment(event_id, file.filename, stored_name, file.content_type, size)
+        except HTTPException:
+            delete_event(event_id)
+            raise
     return RedirectResponse(f"/?ctx={ctx}", status_code=303)
 
 @app.get("/attachments/{attachment_id}")
@@ -181,6 +206,11 @@ def download_attachment(attachment_id: int):
         path,
         media_type=attachment["mime_type"] or "application/octet-stream",
         filename=attachment["original_name"],
+        # Audit finding #4: force download instead of inline rendering, and
+        # tell browsers not to MIME-sniff — an uploaded file must never be
+        # executed/rendered as HTML/script in the app's own origin.
+        content_disposition_type="attachment",
+        headers={"X-Content-Type-Options": "nosniff"},
     )
 
 @app.post("/status/{event_id}")

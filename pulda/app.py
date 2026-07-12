@@ -1,7 +1,11 @@
 import calendar
+import uuid
+from pathlib import Path
 from datetime import date
-from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import FastAPI, Form, File, UploadFile, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from .timeutil import today_kst
+from .config import settings
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from .db import init_db
@@ -10,6 +14,7 @@ from .service import (
     get_event, update_event, defer_event, attention_items,
     life_balance, decision_support, operations_summary, save_reflection,
     CONTEXT_TABS, distinct_projects, context_workspace, calendar_activity, review_for_date,
+    add_attachment, get_attachment,
 )
 from .connectors import sync_notion, sync_github, check_notion, check_github
 from .scheduler import start_scheduler
@@ -82,7 +87,7 @@ def index(request: Request, ctx: str = "today", cal_date: str | None = None):
     tabs = _workspace_tabs()
     if ctx not in {t["ctx"] for t in tabs}:
         ctx = "today"
-    today_iso = date.today().isoformat()
+    today_iso = today_kst().isoformat()
     # A date is "pinned" only when the user explicitly picked one via the
     # calendar — an unpinned view always tracks the live "today" and is
     # therefore eligible for automatic midnight rollover (Review v3 #2).
@@ -91,7 +96,7 @@ def index(request: Request, ctx: str = "today", cal_date: str | None = None):
     try:
         year, month = int(selected_date[:4]), int(selected_date[5:7])
     except ValueError:
-        year, month = date.today().year, date.today().month
+        year, month = today_kst().year, today_kst().month
         selected_date = today_iso
         pinned = False
     workspace = context_workspace(ctx, selected_date)
@@ -123,8 +128,30 @@ def index(request: Request, ctx: str = "today", cal_date: str | None = None):
         "status_options": ["inbox", "planned", "doing", "done", "deferred", "dropped"],
     })
 
+ATTACHMENT_DIR = Path(settings.attachment_dir)
+
+def _save_upload(file: UploadFile) -> tuple[str, int]:
+    """Stream an uploaded file to disk under a random name (never trust the
+    client-supplied filename for the path) and return (stored_name, size).
+    Enforces PULDA_MAX_ATTACHMENT_MB so one bad upload can't fill the disk."""
+    ATTACHMENT_DIR.mkdir(parents=True, exist_ok=True)
+    suffix = Path(file.filename or "").suffix[:10]
+    stored_name = f"{uuid.uuid4().hex}{suffix}"
+    dest = ATTACHMENT_DIR / stored_name
+    max_bytes = settings.max_attachment_mb * 1024 * 1024
+    size = 0
+    with open(dest, "wb") as out:
+        while chunk := file.file.read(1024 * 1024):
+            size += len(chunk)
+            if size > max_bytes:
+                out.close()
+                dest.unlink(missing_ok=True)
+                raise HTTPException(413, f"파일이 너무 큽니다 (최대 {settings.max_attachment_mb}MB)")
+            out.write(chunk)
+    return stored_name, size
+
 @app.post("/capture")
-def capture(text: str = Form(...), ctx: str = Form("today")):
+def capture(text: str = Form(...), ctx: str = Form("today"), file: UploadFile | None = File(None)):
     if not text.strip():
         raise HTTPException(400, "text required")
     # Context-first: an Event captured while inside a workspace tab is
@@ -136,8 +163,25 @@ def capture(text: str = Form(...), ctx: str = Form("today")):
         extra["project"] = ctx.split(":", 1)[1]
     elif ctx.startswith("role:"):
         role_override = ctx.split(":", 1)[1]
-    create_event(text.strip(), role_override=role_override, **extra)
+    event_id = create_event(text.strip(), role_override=role_override, **extra)
+    if file is not None and file.filename:
+        stored_name, size = _save_upload(file)
+        add_attachment(event_id, file.filename, stored_name, file.content_type, size)
     return RedirectResponse(f"/?ctx={ctx}", status_code=303)
+
+@app.get("/attachments/{attachment_id}")
+def download_attachment(attachment_id: int):
+    attachment = get_attachment(attachment_id)
+    if not attachment:
+        raise HTTPException(404, "attachment not found")
+    path = ATTACHMENT_DIR / attachment["stored_name"]
+    if not path.exists():
+        raise HTTPException(404, "file missing on disk")
+    return FileResponse(
+        path,
+        media_type=attachment["mime_type"] or "application/octet-stream",
+        filename=attachment["original_name"],
+    )
 
 @app.post("/status/{event_id}")
 def status(event_id: int, status: str = Form(...), ctx: str = Form("today")):

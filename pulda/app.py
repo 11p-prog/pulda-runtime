@@ -61,9 +61,10 @@ def startup():
     start_scheduler()
 
 def _month_grid(year: int, month: int, activity: dict[str, int], selected: str) -> list[list[dict | None]]:
-    """Weeks x days grid (Mon-first) for the mini calendar, each day carrying
-    its activity count so density can render GitHub-contribution-style."""
-    cal = calendar.Calendar(firstweekday=0)
+    """Weeks x days grid (Sun-first, per user preference — 2026-07-13) for
+    the mini calendar, each day carrying its activity count so density can
+    render GitHub-contribution-style."""
+    cal = calendar.Calendar(firstweekday=6)  # 6 = Sunday in the stdlib's Mon=0..Sun=6 scheme
     weeks = []
     for week in cal.monthdayscalendar(year, month):
         row = []

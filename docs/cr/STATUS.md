@@ -18,16 +18,27 @@ User Verified → Closed`, plus `Blocked` / `Rejected` / `Deferred` as needed.
 **Implemented is not Closed.** Replit may set a CR to Implemented; only the
 user's verification can move it to User Verified → Closed.
 
+**Definition of Done (per CR-0008, 2026-07-13):** a CR may be marked
+`Implemented` only when its acceptance criteria are backed by an
+automated test that would fail if the behavior regressed — a screenshot
+or manual click-through alone is not sufficient. `Related Git Commit`
+must carry the real commit hash at the time of that status change. This
+bar was applied retroactively below: CRs whose acceptance criteria are
+now covered by `tests/test_runtime.py` are `Implemented`; CRs with a real
+gap between claim and test coverage are marked `Implemented / Verification
+incomplete` until closed.
+
 | CR | Title | Priority | Status | Owner | Reviewer | Created | Updated |
 |----|-------|----------|--------|-------|----------|---------|---------|
 | CR-0000 | AI Collaboration Protocol | High | Approved | ChatGPT | User | 2026-07-12 | 2026-07-12 |
-| CR-0001 | Workspace UX | High | Implemented | Replit | User | 2026-07-12 | 2026-07-12 |
-| CR-0002 | Calendar = Date Context | High | Implemented | Replit | User | 2026-07-12 | 2026-07-12 |
-| CR-0003 | Recent Events | High | Implemented | Replit | User | 2026-07-12 | 2026-07-12 |
-| CR-0004 | Automatic Today | High | Implemented | Replit | User | 2026-07-12 | 2026-07-12 |
+| CR-0001 | Workspace UX | High | Implemented / Verification incomplete (no automated test) | Replit | User | 2026-07-12 | 2026-07-13 |
+| CR-0002 | Calendar = Date Context | High | Implemented (date-scoping now covered by test) | Replit | User | 2026-07-12 | 2026-07-13 |
+| CR-0003 | Recent Events | High | Implemented (day-scoping now covered by test) | Replit | User | 2026-07-12 | 2026-07-13 |
+| CR-0004 | Automatic Today | High | Implemented / Verification incomplete (no automated midnight-rollover test) | Replit | User | 2026-07-12 | 2026-07-13 |
 | CR-0005 | Historical Import Framework | Medium | Deferred | — | — | 2026-07-12 | 2026-07-12 |
-| CR-0006 | Privacy-first Architecture | High | Implemented | Replit | User | 2026-07-12 | 2026-07-12 |
-| CR-0007 | Generic File Attachments (Import Phase 1) | Medium | Implemented | Replit | User | 2026-07-13 | 2026-07-13 |
+| CR-0006 | Privacy-first Architecture | High | Implemented (policy/doc only — no runtime enforcement; disclosed in CR text) | Replit | User | 2026-07-12 | 2026-07-12 |
+| CR-0007 | Generic File Attachments (Import Phase 1) | Medium | Implemented (upload validation + transaction rollback now covered by test) | Replit | User | 2026-07-13 | 2026-07-13 |
+| CR-0008 | External Audit Fixes + Verification Standard | High | Implemented | Replit | User | 2026-07-13 | 2026-07-13 |
 
 ## RFCs open for discussion
 - RFC-0001 — AI Memory Structure

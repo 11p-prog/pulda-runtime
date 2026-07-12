@@ -64,6 +64,11 @@
         <a href="/?ctx={{ ctx }}" class="text-[10px] font-semibold text-primary px-2 py-0.5 rounded-full bg-primary/10 hover:bg-primary/20">오늘</a>
         {% endif %}
       </div>
+      <div class="grid grid-cols-7 gap-1 mb-1">
+        {% for wd in ["일","월","화","수","목","금","토"] %}
+        <span class="w-6 h-4 flex items-center justify-center text-[9px] font-medium text-on-surface-variant/40">{{ wd }}</span>
+        {% endfor %}
+      </div>
       <div class="grid grid-cols-7 gap-1">
         {% for w in calendar_weeks %}
           {% for d in w %}

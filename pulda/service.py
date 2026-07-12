@@ -44,6 +44,16 @@ def get_event(event_id: int):
         row = conn.execute("SELECT * FROM events WHERE id=?", (event_id,)).fetchone()
     return dict(row) if row else None
 
+def delete_event(event_id: int) -> None:
+    """Hard-delete an event and any attachments it owns. Used to roll back
+    an Event created by /capture when the accompanying file upload fails,
+    so a rejected attachment never leaves a silent empty Event behind
+    (CR-0007 audit finding #3)."""
+    with connect() as conn:
+        conn.execute("DELETE FROM attachments WHERE event_id=?", (event_id,))
+        conn.execute("DELETE FROM events WHERE id=?", (event_id,))
+    audit("delete_event", str(event_id), "success", "")
+
 PATCHABLE_FIELDS = {
     "status", "role", "area", "kind", "urgency", "importance", "due_date",
     "scheduled_at", "project", "goal", "financial_impact", "family_impact",
@@ -414,10 +424,18 @@ def context_workspace(ctx: str, selected_date: str | None = None) -> dict:
             "ops": {"focus_count": 0, "waiting_count": 0, "blocked_count": 0, "completed_today": 0},
             "is_today": is_today, "selected_date": selected_date,
         }
-    events = context_events(ctx)
-    day_events = [e for e in events if e["created_at"][:10] == selected_date]
-    open_events = [e for e in events if e["status"] not in ("done", "dropped")]
-    completed = [e for e in events if e["status"] == "done" and e["updated_at"][:10] == selected_date]
+    all_events = context_events(ctx)
+    day_events = [e for e in all_events if e["created_at"][:10] == selected_date]
+    open_events = [e for e in all_events if e["status"] not in ("done", "dropped")]
+    completed = [e for e in all_events if e["status"] == "done" and e["updated_at"][:10] == selected_date]
+
+    # Per CR-0002/CR-0003: a historical date is a record of *that day*, not
+    # a lens onto the whole context. "recent" is always day-scoped (an
+    # empty day genuinely has nothing to show — falling back to unrelated
+    # past events under a "최근 Event"/"오늘" label would misrepresent what
+    # happened). The "전체 Event" table is date-scoped on a historical day
+    # too; only the live Today view legitimately shows the whole context.
+    recent = sorted(day_events, key=lambda e: e["created_at"], reverse=True)
 
     if is_today:
         plan = sorted(
@@ -429,19 +447,19 @@ def context_workspace(ctx: str, selected_date: str | None = None) -> dict:
             key=lambda e: e["due_date"],
         )
         deferred = sorted(
-            (e for e in events if e["status"] == "deferred"),
+            (e for e in all_events if e["status"] == "deferred"),
             key=lambda e: (e["next_review_at"] or "9999-99-99", e["updated_at"]),
         )
         blocked = [e for e in open_events if e["blocked_by"]]
-        waiting = [e for e in events if e["status"] == "inbox"]
-        recent = day_events if day_events else sorted(events, key=lambda e: e["created_at"], reverse=True)[:15]
+        waiting = [e for e in all_events if e["status"] == "inbox"]
+        events = all_events
     else:
         # Historical day: no live-state sections — show what actually
         # happened that day instead of pretending it's a live dashboard.
         plan = sorted(day_events, key=lambda e: (-e["importance"], -e["urgency"], e["created_at"]))
         overdue, deferred, blocked = [], [], []
         waiting = [e for e in day_events if e["status"] == "inbox"]
-        recent = sorted(day_events, key=lambda e: e["created_at"], reverse=True)
+        events = day_events
 
     return {
         "events": events,

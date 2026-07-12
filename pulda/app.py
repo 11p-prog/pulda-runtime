@@ -13,7 +13,8 @@ from .service import (
     create_event, list_events, update_status, today_plan, build_review, latest_review, health,
     get_event, update_event, defer_event, attention_items, delete_event,
     life_balance, decision_support, operations_summary, save_reflection,
-    CONTEXT_TABS, distinct_projects, context_workspace, calendar_activity, review_for_date,
+    list_workspace_tabs, add_workspace_tab, remove_workspace_tab, TAB_PRESETS,
+    distinct_projects, context_workspace, calendar_activity, review_for_date,
     add_attachment, get_attachment, group_events_by_date,
 )
 from .connectors import sync_notion, sync_github, check_notion, check_github
@@ -76,11 +77,21 @@ def _month_grid(year: int, month: int, activity: dict[str, int], selected: str) 
     return weeks
 
 def _workspace_tabs():
-    tabs = [CONTEXT_TABS[0]]  # 오늘
+    """오늘 first, then any active projects (auto-derived, per UX v2), then
+    the user's own tabs (add/remove, CR-0011) in their saved order."""
+    user_tabs = list_workspace_tabs()
+    today_tab = next((t for t in user_tabs if t["ctx"] == "today"), {"ctx": "today", "label": "오늘", "icon": "target"})
+    rest = [t for t in user_tabs if t["ctx"] != "today"]
+    tabs = [today_tab]
     for name in distinct_projects():
-        tabs.append({"ctx": f"project:{name}", "label": f"Project: {name}", "icon": "folder_open"})
-    tabs.extend(CONTEXT_TABS[1:])  # Church / Family / Knowledge
+        tabs.append({"ctx": f"project:{name}", "label": f"Project: {name}", "icon": "folder_open", "removable": False})
+    tabs.extend(rest)
     return tabs
+
+def _tab_add_options():
+    """Presets not already open as a tab, offered in the '+' picker."""
+    open_ctx = {t["ctx"] for t in list_workspace_tabs()}
+    return [p for p in TAB_PRESETS if p["ctx"] not in open_ctx]
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request, ctx: str = "today", cal_date: str | None = None):
@@ -110,6 +121,7 @@ def index(request: Request, ctx: str = "today", cal_date: str | None = None):
         "today": today_iso,
         "ctx": ctx,
         "tabs": tabs,
+        "tab_add_options": _tab_add_options(),
         "calendar_weeks": _month_grid(year, month, calendar_activity(year, month), selected_date),
         "calendar_label": f"{year}.{month:02d}",
         "selected_date": selected_date,
@@ -213,6 +225,34 @@ def download_attachment(attachment_id: int):
         content_disposition_type="attachment",
         headers={"X-Content-Type-Options": "nosniff"},
     )
+
+@app.post("/tabs/add")
+def tabs_add(kind: str = Form(...), label: str = Form(...), icon: str = Form("tab"), value: str = Form("")):
+    """Add a workspace tab (CR-0011). 'preset' adds one of the suggested
+    role/knowledge tabs as-is; 'project' opens a tab scoped to a project
+    name (also reachable automatically once an Event uses that project)."""
+    if kind == "preset":
+        ctx = value
+    elif kind == "project":
+        name = value.strip()
+        if not name:
+            raise HTTPException(400, "프로젝트 이름을 입력하세요")
+        ctx = f"project:{name}"
+    else:
+        raise HTTPException(400, "알 수 없는 탭 종류입니다")
+    try:
+        add_workspace_tab(ctx, label, icon)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return RedirectResponse(f"/?ctx={ctx}", status_code=303)
+
+@app.post("/tabs/remove")
+def tabs_remove(ctx: str = Form(...)):
+    try:
+        remove_workspace_tab(ctx)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return RedirectResponse("/?ctx=today", status_code=303)
 
 @app.post("/status/{event_id}")
 def status(event_id: int, status: str = Form(...), ctx: str = Form("today")):

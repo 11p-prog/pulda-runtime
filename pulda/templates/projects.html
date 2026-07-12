@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>프로젝트 · Pulda OS</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<style>
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24; }
+  .glass-blur { backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+</style>
+<script id="tailwind-config">
+  tailwind.config = {
+    theme: { extend: {
+      colors: {
+        "surface-bright": "#fcf8fb", "surface": "#fcf8fb", "background": "#fcf8fb",
+        "surface-container-lowest": "#ffffff", "surface-container-low": "#f6f3f5",
+        "surface-container": "#f0edef", "surface-container-high": "#eae7ea",
+        "surface-container-highest": "#e4e2e4",
+        "on-surface": "#1b1b1d", "on-surface-variant": "#414755", "on-background": "#1b1b1d",
+        "outline": "#717786", "outline-variant": "#c1c6d7",
+        "primary": "#0058bc", "on-primary": "#ffffff", "primary-container": "#0070eb",
+        "secondary": "#5d5e63", "on-secondary": "#ffffff", "secondary-container": "#dfdfe4",
+        "on-secondary-container": "#616267",
+        "error": "#ba1a1a", "on-error": "#ffffff",
+        "success": "#1b7a3d", "success-container": "#d7f2e0",
+      },
+      borderRadius: { DEFAULT: "0.25rem", lg: "0.5rem", xl: "0.75rem", full: "9999px" },
+      fontFamily: { sans: ["Inter"] },
+    } },
+  }
+</script>
+</head>
+<body class="bg-surface-bright text-on-surface font-sans overflow-x-hidden">
+<div class="flex min-h-screen w-full relative">
+
+  <!-- Side Nav -->
+  <nav class="h-screen w-64 fixed left-0 top-0 flex flex-col py-8 px-4 bg-surface z-50 border-r border-outline-variant/10">
+    <div class="flex items-center gap-3 px-4 mb-10">
+      <div class="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+        <span class="material-symbols-outlined text-white text-lg">grain</span>
+      </div>
+      <div>
+        <h1 class="text-lg font-semibold text-primary leading-tight">Pulda OS</h1>
+        <p class="text-[11px] tracking-wide text-on-surface-variant/70">삶과 일을 함께 운영합니다</p>
+      </div>
+    </div>
+
+    <!-- Main navigation (IA-0001) -->
+    <div class="space-y-1">
+      <a class="flex items-center gap-3 px-4 py-3 {{ 'bg-secondary-container text-on-secondary-container' if page == 'home' else 'text-on-surface-variant hover:bg-surface-container-low transition-colors' }} rounded-xl text-[13px] font-medium" href="/">
+        <span class="material-symbols-outlined">target</span> 오늘
+      </a>
+      <a class="flex items-center gap-3 px-4 py-3 {{ 'bg-secondary-container text-on-secondary-container' if page == 'projects' else 'text-on-surface-variant hover:bg-surface-container-low transition-colors' }} rounded-xl text-[13px] font-medium" href="/projects">
+        <span class="material-symbols-outlined">folder_open</span> 프로젝트
+      </a>
+      <span class="flex items-center gap-3 px-4 py-3 text-on-surface-variant/40 rounded-xl text-[13px] font-medium cursor-not-allowed" title="다음 단계에서 제공됩니다">
+        <span class="material-symbols-outlined">autorenew</span> 루틴 <span class="text-[10px]">(준비중)</span>
+      </span>
+      <span class="flex items-center gap-3 px-4 py-3 text-on-surface-variant/40 rounded-xl text-[13px] font-medium cursor-not-allowed" title="다음 단계에서 제공됩니다">
+        <span class="material-symbols-outlined">school</span> 지식 <span class="text-[10px]">(준비중)</span>
+      </span>
+      <span class="flex items-center gap-3 px-4 py-3 text-on-surface-variant/40 rounded-xl text-[13px] font-medium cursor-not-allowed" title="다음 단계에서 제공됩니다">
+        <span class="material-symbols-outlined">inventory_2</span> 보관함 <span class="text-[10px]">(준비중)</span>
+      </span>
+      <span class="flex items-center gap-3 px-4 py-3 text-on-surface-variant/40 rounded-xl text-[13px] font-medium cursor-not-allowed" title="다음 단계에서 제공됩니다">
+        <span class="material-symbols-outlined">settings</span> 설정 <span class="text-[10px]">(준비중)</span>
+      </span>
+    </div>
+
+    <div class="mt-auto px-4 flex items-center gap-3 py-4 border-t border-outline-variant/10">
+      <span class="w-2.5 h-2.5 rounded-full {{ 'bg-success' if notion_status.ok else 'bg-error' }}"></span>
+      <div>
+        <p class="text-[12px] font-semibold">Notion 연동</p>
+        {% if notion_status.ok %}
+        <p class="text-[11px] text-on-surface-variant">{{ notion_status.identity.workspace_name }} 연결됨</p>
+        {% else %}
+        <p class="text-[11px] text-error">연결 확인 필요</p>
+        {% endif %}
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main -->
+  <main class="ml-64 flex-1 flex flex-col relative">
+    <header class="flex justify-between items-center w-full px-10 py-6 sticky top-0 z-40 bg-surface-bright/80 glass-blur">
+      <span class="text-[11px] font-semibold text-primary tracking-widest uppercase">프로젝트</span>
+    </header>
+
+    <div class="max-w-4xl mx-auto w-full px-10 py-10 pb-24 flex flex-col gap-6">
+      <p class="text-[14px] text-on-surface-variant/60">Event에 프로젝트가 태그되면 이곳에 자동으로 나타납니다. 별도로 프로젝트를 만들거나 지정할 필요는 없습니다.</p>
+      <div class="grid grid-cols-2 gap-4">
+        {% for p in projects %}
+        <a href="/projects/{{ p.name }}" class="bg-surface-container-lowest rounded-2xl p-6 border border-outline-variant/5 hover:border-primary/30 transition-colors">
+          <div class="flex items-center gap-3 mb-2">
+            <span class="material-symbols-outlined text-primary">folder_open</span>
+            <span class="text-[16px] font-semibold text-on-surface">{{ p.name }}</span>
+          </div>
+          <p class="text-[12px] text-on-surface-variant/60">{{ p.count }}건의 Event</p>
+        </a>
+        {% else %}
+        <p class="text-[15px] text-on-surface-variant/40 py-4 col-span-2">아직 프로젝트로 태그된 Event가 없습니다.</p>
+        {% endfor %}
+      </div>
+    </div>
+  </main>
+</div>
+</body>
+</html>

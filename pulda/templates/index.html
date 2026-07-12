@@ -54,14 +54,14 @@
     </div>
 
     <!-- Mini calendar: a fast date selector + activity density indicator,
-         not the primary view (per UX v2). Picking a date is a real context
-         switch — it activates that day's workspace (Review v3 #1/#6), it
-         doesn't just highlight a cell. -->
+         not the primary view. Picking a date is a real context switch — it
+         activates that day's workspace (Review v3 #1/#6), it doesn't just
+         highlight a cell. -->
     <div class="px-4 mb-6">
       <div class="flex items-center justify-between mb-2">
         <span class="text-[11px] font-semibold text-on-surface-variant tracking-wide">{{ calendar_label }}</span>
         {% if not is_today %}
-        <a href="/?ctx={{ ctx }}" class="text-[10px] font-semibold text-primary px-2 py-0.5 rounded-full bg-primary/10 hover:bg-primary/20">오늘</a>
+        <a href="/" class="text-[10px] font-semibold text-primary px-2 py-0.5 rounded-full bg-primary/10 hover:bg-primary/20">오늘</a>
         {% endif %}
       </div>
       <div class="grid grid-cols-7 gap-1 mb-1">
@@ -73,7 +73,7 @@
         {% for w in calendar_weeks %}
           {% for d in w %}
           {% if d %}
-          <a href="/?ctx={{ ctx }}&cal_date={{ d.iso }}"
+          <a href="/?cal_date={{ d.iso }}"
             class="w-6 h-6 flex items-center justify-center rounded-[6px] text-[10px]
               {% if d.selected %}bg-primary text-on-primary font-semibold
               {% elif d.count >= 3 %}bg-primary/70 text-on-primary
@@ -88,24 +88,22 @@
       </div>
     </div>
 
-    <!-- Sidebar is navigation only — Event capture lives in the persistent
-         bottom capture bar, not here. -->
+    <!-- Main navigation (IA-0001): users navigate by purpose, not by
+         database entity type. No central Event/Task/Goal/Project tabs —
+         Home is a single Activity Feed; Projects is its own destination. -->
     <div class="space-y-1">
-      <a class="flex items-center gap-3 px-4 py-3 {{ 'bg-secondary-container text-on-secondary-container' if ctx == 'today' else 'text-on-surface-variant hover:bg-surface-container-low transition-colors' }} rounded-xl text-[13px] font-medium" href="/?ctx=today">
+      <a class="flex items-center gap-3 px-4 py-3 {{ 'bg-secondary-container text-on-secondary-container' if page == 'home' else 'text-on-surface-variant hover:bg-surface-container-low transition-colors' }} rounded-xl text-[13px] font-medium" href="/">
         <span class="material-symbols-outlined">target</span> 오늘
       </a>
-      <span class="flex items-center gap-3 px-4 py-3 text-on-surface-variant/40 rounded-xl text-[13px] font-medium cursor-not-allowed" title="다음 단계에서 제공됩니다">
-        <span class="material-symbols-outlined">folder_open</span> 프로젝트 <span class="text-[10px]">(준비중)</span>
-      </span>
-      <a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-low transition-colors rounded-xl text-[13px] font-medium" href="#waiting-section">
-        <span class="material-symbols-outlined">hourglass_empty</span> 대기
+      <a class="flex items-center gap-3 px-4 py-3 {{ 'bg-secondary-container text-on-secondary-container' if page == 'projects' else 'text-on-surface-variant hover:bg-surface-container-low transition-colors' }} rounded-xl text-[13px] font-medium" href="/projects">
+        <span class="material-symbols-outlined">folder_open</span> 프로젝트
       </a>
+      <span class="flex items-center gap-3 px-4 py-3 text-on-surface-variant/40 rounded-xl text-[13px] font-medium cursor-not-allowed" title="다음 단계에서 제공됩니다">
+        <span class="material-symbols-outlined">autorenew</span> 루틴 <span class="text-[10px]">(준비중)</span>
+      </span>
       <span class="flex items-center gap-3 px-4 py-3 text-on-surface-variant/40 rounded-xl text-[13px] font-medium cursor-not-allowed" title="다음 단계에서 제공됩니다">
         <span class="material-symbols-outlined">school</span> 지식 <span class="text-[10px]">(준비중)</span>
       </span>
-      <a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-low transition-colors rounded-xl text-[13px] font-medium" href="#review-section">
-        <span class="material-symbols-outlined">fact_check</span> 리뷰
-      </a>
       <span class="flex items-center gap-3 px-4 py-3 text-on-surface-variant/40 rounded-xl text-[13px] font-medium cursor-not-allowed" title="다음 단계에서 제공됩니다">
         <span class="material-symbols-outlined">inventory_2</span> 보관함 <span class="text-[10px]">(준비중)</span>
       </span>
@@ -113,6 +111,19 @@
         <span class="material-symbols-outlined">settings</span> 설정 <span class="text-[10px]">(준비중)</span>
       </span>
     </div>
+
+    <!-- In-page quick links (jump within the Home feed — not separate nav
+         destinations). -->
+    {% if page == 'home' %}
+    <div class="mt-4 pt-4 border-t border-outline-variant/10 space-y-1">
+      <a class="flex items-center gap-3 px-4 py-2 text-on-surface-variant/70 hover:bg-surface-container-low transition-colors rounded-xl text-[12px] font-medium" href="#waiting-section">
+        <span class="material-symbols-outlined text-[18px]">hourglass_empty</span> 대기
+      </a>
+      <a class="flex items-center gap-3 px-4 py-2 text-on-surface-variant/70 hover:bg-surface-container-low transition-colors rounded-xl text-[12px] font-medium" href="#review-section">
+        <span class="material-symbols-outlined text-[18px]">fact_check</span> 리뷰
+      </a>
+    </div>
+    {% endif %}
 
     <div class="mt-auto px-4 flex items-center gap-3 py-4 border-t border-outline-variant/10">
       <span class="w-2.5 h-2.5 rounded-full {{ 'bg-success' if notion_status.ok else 'bg-error' }}"></span>
@@ -134,82 +145,20 @@
       <div class="flex items-center gap-3">
         <span class="text-[11px] font-semibold {{ 'text-on-surface-variant' if is_today else 'text-primary' }} tracking-widest uppercase">{{ selected_date }}{% if not is_today %} · 과거 기록{% endif %}</span>
         {% if not is_today %}
-        <a href="/?ctx={{ ctx }}" class="text-[11px] font-medium text-primary bg-primary/10 hover:bg-primary/20 rounded-full px-3 py-1">Today로 돌아가기</a>
+        <a href="/" class="text-[11px] font-medium text-primary bg-primary/10 hover:bg-primary/20 rounded-full px-3 py-1">Today로 돌아가기</a>
         {% endif %}
       </div>
     </header>
 
-    <!-- Workspace tabs: Replit-style tab strip (CR-0011) — user-managed,
-         not fixed categories. '오늘' is the only permanent tab; every
-         other tab can be closed with the × and new ones opened with +. -->
-    <div class="flex items-center gap-1 px-10 pt-2 border-b border-outline-variant/10 overflow-x-auto sticky top-[64px] z-30 bg-surface-bright/90 glass-blur min-w-0">
-      {% for t in tabs %}
-      <div class="group flex items-center gap-1 pl-4 pr-2 py-2.5 text-[13px] font-medium whitespace-nowrap rounded-t-lg border-b-2 transition-colors
-          {% if t.ctx == ctx %}border-primary text-primary bg-surface-container-lowest{% else %}border-transparent text-on-surface-variant/60 hover:text-on-surface-variant hover:bg-surface-container-low{% endif %}">
-        <a href="/?ctx={{ t.ctx }}" class="flex items-center gap-2">
-          <span class="material-symbols-outlined text-[16px]">{{ t.icon }}</span> {{ t.label }}
-        </a>
-        {% if t.removable %}
-        <form method="post" action="/tabs/remove" onsubmit="return confirm('&quot;{{ t.label }}&quot; 탭을 닫을까요? (기록된 Event는 삭제되지 않습니다)')">
-          <input type="hidden" name="ctx" value="{{ t.ctx }}"/>
-          <button type="submit" aria-label="{{ t.label }} 탭 닫기" class="w-5 h-5 flex items-center justify-center rounded-full text-on-surface-variant/40 opacity-0 group-hover:opacity-100 hover:bg-error/10 hover:text-error transition-opacity">
-            <span class="material-symbols-outlined text-[14px]">close</span>
-          </button>
-        </form>
-        {% endif %}
-      </div>
-      {% endfor %}
-
-      <!-- Add-tab picker -->
-      <div class="relative ml-1" id="tab-add-wrap">
-        <button type="button" id="tab-add-trigger" aria-label="탭 추가"
-          class="flex items-center justify-center w-8 h-8 rounded-lg text-on-surface-variant/50 hover:text-primary hover:bg-primary/5 transition-colors mb-0.5">
-          <span class="material-symbols-outlined text-[18px]">add</span>
-        </button>
-        <div id="tab-add-menu" class="hidden absolute left-0 top-10 z-40 w-64 bg-surface-container-lowest rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-outline-variant/10 p-2">
-          {% if tab_add_options %}
-          <p class="text-[10px] uppercase tracking-wide text-on-surface-variant/50 px-2 pt-1 pb-1">추천 탭</p>
-          {% for p in tab_add_options %}
-          <form method="post" action="/tabs/add">
-            <input type="hidden" name="kind" value="preset"/>
-            <input type="hidden" name="value" value="{{ p.ctx }}"/>
-            <input type="hidden" name="label" value="{{ p.label }}"/>
-            <input type="hidden" name="icon" value="{{ p.icon }}"/>
-            <button type="submit" class="w-full flex items-center gap-2 text-left px-2 py-2 rounded-lg text-[13px] text-on-surface hover:bg-surface-container-low">
-              <span class="material-symbols-outlined text-[16px] text-on-surface-variant/60">{{ p.icon }}</span> {{ p.label }}
-            </button>
-          </form>
-          {% endfor %}
-          <div class="border-t border-outline-variant/10 my-1"></div>
-          {% endif %}
-          <p class="text-[10px] uppercase tracking-wide text-on-surface-variant/50 px-2 pt-1 pb-1">프로젝트 탭 만들기</p>
-          <form method="post" action="/tabs/add" class="flex items-center gap-1 px-2 pb-2">
-            <input type="hidden" name="kind" value="project"/>
-            <input type="hidden" name="icon" value="folder_open"/>
-            <input type="text" name="value" required placeholder="프로젝트 이름"
-              class="flex-1 text-[12px] rounded-lg border border-outline-variant/20 bg-surface-bright px-2 py-1.5 focus:ring-1 focus:ring-primary focus:outline-none"
-              oninput="this.form.label.value = this.value ? ('Project: ' + this.value) : ''"/>
-            <input type="hidden" name="label" value=""/>
-            <button type="submit" class="text-[12px] font-medium text-primary px-2 py-1.5 rounded-lg hover:bg-primary/10">추가</button>
-          </form>
-        </div>
-      </div>
-    </div>
-
     <div class="max-w-4xl mx-auto w-full px-10 py-10 pb-36 flex flex-col gap-14">
 
-      {% if ctx == "knowledge" %}
-      <section class="py-20 text-center">
-        <span class="material-symbols-outlined text-4xl text-on-surface-variant/30 mb-3 block">school</span>
-        <p class="text-[15px] text-on-surface-variant/50">지식 워크스페이스는 아직 준비 중입니다. 아래 캡처 바로 기록은 계속 남을 수 있습니다.</p>
-      </section>
-      {% else %}
-
-      <!-- Operational status hero (dashboard tiles, not a greeting/checklist) -->
+      <!-- Operational status hero (dashboard tiles, not a greeting/checklist).
+           Home has one primary surface — the Activity Feed below — per
+           IA-0001; there is no central Event/Task/Goal/Project tab to
+           switch between here. -->
       <section>
         <h2 class="text-[13px] tracking-widest uppercase text-primary font-semibold mb-4">
-          {% for t in tabs %}{% if t.ctx == ctx %}{{ t.label if ctx != "today" else "오늘의 운영" }}{% endif %}{% endfor %}
-          {% if not is_today %} · {{ selected_date }}{% endif %}
+          오늘의 운영{% if not is_today %} · {{ selected_date }}{% endif %}
         </h2>
         <div class="grid grid-cols-4 gap-3 mb-3">
           <div class="bg-surface-container-lowest rounded-2xl p-4 border border-outline-variant/5">
@@ -262,7 +211,6 @@
               <div class="flex items-center gap-3">
                 <span class="text-[11px] text-on-surface-variant/50">{{ e.role }} / {{ e.area }}</span>
                 <form method="post" action="/status/{{ e.id }}" class="flex items-center gap-1">
-                  <input type="hidden" name="ctx" value="{{ ctx }}"/>
                   <select name="status" class="text-[11px] rounded-lg border-none bg-surface-container-low py-1">
                     {% for s in status_options %}<option value="{{ s }}" {{ 'selected' if s == e.status }}>{{ status_labels[s] }}</option>{% endfor %}
                   </select>
@@ -404,9 +352,9 @@
         <h3 class="text-[13px] font-medium text-on-surface-variant mb-4">{{ '일일 리뷰' if is_today else selected_date + ' 리뷰' }}</h3>
         {% if is_today %}
         <div class="flex gap-3 mb-4">
-          <form method="post" action="/review"><input type="hidden" name="ctx" value="{{ ctx }}"/><button class="py-2 px-4 bg-primary text-on-primary rounded-xl text-[13px] font-medium">일일 Review 생성</button></form>
-          <form method="post" action="/sync/notion"><input type="hidden" name="ctx" value="{{ ctx }}"/><button class="py-2 px-4 bg-surface-container-low text-on-surface rounded-xl text-[13px] font-medium">Notion 동기화</button></form>
-          <form method="post" action="/sync/github"><input type="hidden" name="ctx" value="{{ ctx }}"/><button class="py-2 px-4 bg-surface-container-low text-on-surface rounded-xl text-[13px] font-medium">GitHub 동기화</button></form>
+          <form method="post" action="/review"><button class="py-2 px-4 bg-primary text-on-primary rounded-xl text-[13px] font-medium">일일 Review 생성</button></form>
+          <form method="post" action="/sync/notion"><button class="py-2 px-4 bg-surface-container-low text-on-surface rounded-xl text-[13px] font-medium">Notion 동기화</button></form>
+          <form method="post" action="/sync/github"><button class="py-2 px-4 bg-surface-container-low text-on-surface rounded-xl text-[13px] font-medium">GitHub 동기화</button></form>
         </div>
         {% endif %}
         {% if review %}
@@ -414,7 +362,6 @@
           <pre class="whitespace-pre-wrap text-[14px] text-on-surface-variant font-sans mb-4">{{ review.summary }}</pre>
           {% if is_today %}
           <form method="post" action="/reviews/reflection">
-            <input type="hidden" name="ctx" value="{{ ctx }}"/>
             <label class="text-[12px] text-on-surface-variant/70 mb-2 block">오늘 하루를 한 줄로 정리하면?</label>
             <textarea name="text" class="w-full bg-white/60 border-none rounded-xl p-3 text-[14px] focus:ring-1 focus:ring-primary resize-none min-h-[70px] mb-2" placeholder="회고를 남겨보세요">{{ review.reflection or '' }}</textarea>
             <button class="py-2 px-4 text-[13px] font-medium text-primary hover:text-on-primary hover:bg-primary rounded-lg transition-all">회고 저장</button>
@@ -427,7 +374,6 @@
         <p class="text-[14px] text-on-surface-variant/50">{{ '아직 생성된 리뷰가 없습니다. 위 버튼으로 생성해 보세요.' if is_today else '이 날짜에는 생성된 리뷰가 없습니다.' }}</p>
         {% endif %}
       </div>
-      {% endif %}
 
     </div>
   </main>
@@ -452,7 +398,7 @@
     </div>
 
     <div>
-      <h4 class="text-[11px] text-on-surface-variant tracking-widest uppercase font-semibold mb-4">Decision Support</h4>
+      <h4 class="text-[11px] text-on-surface-variant tracking-widest uppercase font-semibold mb-4">AI Insight</h4>
       <div class="space-y-3">
         {% for i in insights %}
         <div class="flex items-start gap-3 p-4 rounded-xl border border-outline-variant/10">
@@ -473,11 +419,6 @@
   <!-- Persistent capture bar: the primary interaction, always visible,
        never hidden by scrolling. Everything starts here as an Event. -->
   <div class="fixed bottom-6 left-64 right-80 flex flex-col items-center px-6 z-[60] pointer-events-none gap-1.5">
-    {% if ctx != "today" %}
-    <span class="pointer-events-none text-[11px] text-on-surface-variant/60 bg-surface-container-lowest/90 px-3 py-1 rounded-full border border-outline-variant/10">
-      {% for t in tabs %}{% if t.ctx == ctx %}지금 기록하면 <b class="text-primary font-medium">{{ t.label }}</b>에 저장됩니다{% endif %}{% endfor %}
-    </span>
-    {% endif %}
     <form method="post" action="/capture" id="capture-bar-form" enctype="multipart/form-data"
       class="pointer-events-auto w-full max-w-2xl bg-surface-container-lowest/95 glass-blur rounded-[1.5rem] shadow-[0_12px_40px_rgba(0,0,0,0.14)] border border-outline-variant/10 p-2 flex flex-col gap-1">
       <div id="capture-file-preview" class="hidden items-center gap-2 px-3 pt-1 text-[12px] text-on-surface-variant/70">
@@ -488,7 +429,6 @@
         </button>
       </div>
       <div class="flex items-end gap-2">
-        <input type="hidden" name="ctx" value="{{ ctx }}"/>
         <input type="file" name="file" id="capture-file-input" class="hidden" accept=".pdf,.png,.jpg,.jpeg,.heic,.webp,.gif"/>
         <button type="button" id="capture-file-trigger" aria-label="파일 첨부 (PDF/사진)"
           class="shrink-0 w-10 h-10 flex items-center justify-center text-on-surface-variant/60 hover:text-primary hover:bg-primary/5 rounded-full transition-colors mb-0.5">
@@ -540,21 +480,6 @@
     }
   });
   ta.focus();
-})();
-
-// Add-tab picker: click + to open, click elsewhere to close (CR-0011).
-(function () {
-  var trigger = document.getElementById('tab-add-trigger');
-  var menu = document.getElementById('tab-add-menu');
-  var wrap = document.getElementById('tab-add-wrap');
-  if (!trigger || !menu || !wrap) return;
-  trigger.addEventListener('click', function (e) {
-    e.stopPropagation();
-    menu.classList.toggle('hidden');
-  });
-  document.addEventListener('click', function (e) {
-    if (!wrap.contains(e.target)) menu.classList.add('hidden');
-  });
 })();
 
 // Automatic day rollover (Review v3 #2): "Today" must follow real time

@@ -319,54 +319,6 @@ def operations_summary() -> dict:
         "signals": signals,
     }
 
-# Presets offered in the "+" add-tab picker (CR-0011). Drafted from the
-# role vocabulary the classifier already assigns events to
-# (classifier.ROLE_KEYWORDS: 가족/회사/성당/개인) plus the Knowledge
-# placeholder — these are suggestions, not a fixed set; the underlying
-# workspace_tabs table is fully user-managed (add/remove any ctx).
-TAB_PRESETS = [
-    {"ctx": "role:성당", "label": "Church", "icon": "church"},
-    {"ctx": "role:가족", "label": "Family", "icon": "diversity_3"},
-    {"ctx": "role:회사", "label": "Work", "icon": "work"},
-    {"ctx": "role:개인", "label": "Personal", "icon": "person"},
-    {"ctx": "knowledge", "label": "Knowledge", "icon": "school"},
-]
-
-def list_workspace_tabs() -> list[dict]:
-    """User-managed workspace tabs, in display order. '오늘' is always
-    present (seeded non-removable, and the UI never offers a delete
-    control for it) so the workspace always has a default landing tab."""
-    with connect() as conn:
-        rows = conn.execute(
-            "SELECT ctx, label, icon, removable, sort_order FROM workspace_tabs ORDER BY sort_order, id"
-        ).fetchall()
-    return [dict(r) for r in rows]
-
-def add_workspace_tab(ctx: str, label: str, icon: str = "tab") -> dict:
-    if not ctx or not label.strip():
-        raise ValueError("ctx and label are required")
-    with connect() as conn:
-        existing = conn.execute("SELECT id FROM workspace_tabs WHERE ctx=?", (ctx,)).fetchone()
-        if existing:
-            raise ValueError("이미 존재하는 탭입니다")
-        max_order = conn.execute("SELECT COALESCE(MAX(sort_order),0) m FROM workspace_tabs").fetchone()["m"]
-        conn.execute(
-            "INSERT INTO workspace_tabs(ctx,label,icon,removable,sort_order) VALUES(?,?,?,1,?)",
-            (ctx, label.strip(), icon, max_order + 10),
-        )
-    audit("add_workspace_tab", ctx, "success", label)
-    return {"ctx": ctx, "label": label.strip(), "icon": icon}
-
-def remove_workspace_tab(ctx: str) -> None:
-    if ctx == "today":
-        raise ValueError("오늘 탭은 제거할 수 없습니다")
-    with connect() as conn:
-        row = conn.execute("SELECT removable FROM workspace_tabs WHERE ctx=?", (ctx,)).fetchone()
-        if not row:
-            raise ValueError("존재하지 않는 탭입니다")
-        conn.execute("DELETE FROM workspace_tabs WHERE ctx=?", (ctx,))
-    audit("remove_workspace_tab", ctx, "success", "")
-
 def distinct_projects() -> list[str]:
     """Project names currently in use, used to build one workspace tab per
     active project (VS Code-style, per UX v2)."""
@@ -458,17 +410,6 @@ def context_workspace(ctx: str, selected_date: str | None = None) -> dict:
     today = today_kst().isoformat()
     selected_date = selected_date or today
     is_today = selected_date == today
-    if ctx == "knowledge":
-        # Knowledge has no capture path yet (sidebar still says "준비중"),
-        # but the date axis must behave the same as every other tab: picking
-        # a date shows that date's (currently empty) record, not a
-        # permanently blank stub regardless of which date is selected.
-        return {
-            "events": [], "events_grouped": [], "plan": [], "recent": [],
-            "attention": {"overdue": [], "deferred": [], "blocked": []},
-            "ops": {"focus_count": 0, "waiting_count": 0, "blocked_count": 0, "completed_today": 0},
-            "is_today": is_today, "selected_date": selected_date,
-        }
     all_events = context_events(ctx)
     day_events = [e for e in all_events if e["created_at"][:10] == selected_date]
     open_events = [e for e in all_events if e["status"] not in ("done", "dropped")]

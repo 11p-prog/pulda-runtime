@@ -10,7 +10,7 @@ from pulda.classifier import classify
 from pulda.service import (
     create_event, list_events, update_status, build_review, update_event, defer_event,
     get_event, delete_event, context_workspace, add_attachment, group_events_by_date,
-    list_workspace_tabs, add_workspace_tab, remove_workspace_tab,
+    context_events, distinct_projects,
 )
 from pulda.timeutil import date_label, today_kst
 from datetime import timedelta
@@ -146,29 +146,18 @@ def test_group_events_by_date_buckets_and_preserves_order():
     assert [e["id"] for e in groups[0]["events"]] == [1, 2]
     assert [e["id"] for e in groups[1]["events"]] == [3]
 
-def test_workspace_tabs_are_user_managed():
-    # CR-0011: '오늘' is the only permanent tab; every other tab can be
-    # opened/closed by the user, and duplicates/invalid removals are
-    # rejected rather than silently corrupting the tab list.
-    tabs_before = {t["ctx"] for t in list_workspace_tabs()}
-    assert "today" in tabs_before
+def test_home_has_no_tab_bar_single_context():
+    # CR-0012/IA-0001 (superseding CR-0011): Home is a single Activity Feed —
+    # there is no per-tab context to switch between. context_workspace's
+    # "today" ctx must keep working as the sole Home view.
+    text = f"프로젝트탭테스트 {datetime.now().isoformat()}"
+    create_event(text, source="manual", project="탭리버트테스트")
+    ws = context_workspace("today", today_kst().isoformat())
+    assert any(text in e["text"] for e in ws["events"])
 
-    add_workspace_tab("role:테스트", "Test Role", "science")
-    tabs_after_add = {t["ctx"] for t in list_workspace_tabs()}
-    assert "role:테스트" in tabs_after_add
-
-    try:
-        add_workspace_tab("role:테스트", "Test Role Again", "science")
-        assert False, "duplicate ctx should be rejected"
-    except ValueError:
-        pass
-
-    remove_workspace_tab("role:테스트")
-    tabs_after_remove = {t["ctx"] for t in list_workspace_tabs()}
-    assert "role:테스트" not in tabs_after_remove
-
-    try:
-        remove_workspace_tab("today")
-        assert False, "removing the default 오늘 tab should be rejected"
-    except ValueError:
-        pass
+def test_projects_nav_lists_and_scopes_by_project():
+    project_name = f"탭리버트테스트-{datetime.now().timestamp()}"
+    create_event("프로젝트 전용 이벤트", source="manual", project=project_name)
+    assert project_name in distinct_projects()
+    scoped = context_events(f"project:{project_name}", limit=10)
+    assert scoped and all(e["project"] == project_name for e in scoped)

@@ -13,8 +13,7 @@ from .service import (
     create_event, list_events, update_status, today_plan, build_review, latest_review, health,
     get_event, update_event, defer_event, attention_items, delete_event,
     life_balance, decision_support, operations_summary, save_reflection,
-    list_workspace_tabs, add_workspace_tab, remove_workspace_tab, TAB_PRESETS,
-    distinct_projects, context_workspace, calendar_activity, review_for_date,
+    distinct_projects, context_workspace, context_events, calendar_activity, review_for_date,
     add_attachment, get_attachment, group_events_by_date,
 )
 from .connectors import sync_notion, sync_github, check_notion, check_github
@@ -77,28 +76,12 @@ def _month_grid(year: int, month: int, activity: dict[str, int], selected: str) 
         weeks.append(row)
     return weeks
 
-def _workspace_tabs():
-    """오늘 first, then any active projects (auto-derived, per UX v2), then
-    the user's own tabs (add/remove, CR-0011) in their saved order."""
-    user_tabs = list_workspace_tabs()
-    today_tab = next((t for t in user_tabs if t["ctx"] == "today"), {"ctx": "today", "label": "오늘", "icon": "target"})
-    rest = [t for t in user_tabs if t["ctx"] != "today"]
-    tabs = [today_tab]
-    for name in distinct_projects():
-        tabs.append({"ctx": f"project:{name}", "label": f"Project: {name}", "icon": "folder_open", "removable": False})
-    tabs.extend(rest)
-    return tabs
-
-def _tab_add_options():
-    """Presets not already open as a tab, offered in the '+' picker."""
-    open_ctx = {t["ctx"] for t in list_workspace_tabs()}
-    return [p for p in TAB_PRESETS if p["ctx"] not in open_ctx]
-
 @app.get("/", response_class=HTMLResponse)
-def index(request: Request, ctx: str = "today", cal_date: str | None = None):
-    tabs = _workspace_tabs()
-    if ctx not in {t["ctx"] for t in tabs}:
-        ctx = "today"
+def index(request: Request, cal_date: str | None = None):
+    """Home: the single Activity Feed (IA-0001/CR-0012, decided 2026-07-13,
+    superseding the CR-0011 tab bar) — no central Event/Task/Goal/Project
+    tabs to switch between. The only remaining context axis is the date
+    picked from the sidebar calendar."""
     today_iso = today_kst().isoformat()
     # A date is "pinned" only when the user explicitly picked one via the
     # calendar — an unpinned view always tracks the live "today" and is
@@ -111,7 +94,7 @@ def index(request: Request, ctx: str = "today", cal_date: str | None = None):
         year, month = today_kst().year, today_kst().month
         selected_date = today_iso
         pinned = False
-    workspace = context_workspace(ctx, selected_date)
+    workspace = context_workspace("today", selected_date)
     review = review_for_date(selected_date)
     try:
         notion_status = check_notion()
@@ -120,16 +103,14 @@ def index(request: Request, ctx: str = "today", cal_date: str | None = None):
     return templates.TemplateResponse("index.html", {
         "request": request,
         "today": today_iso,
-        "ctx": ctx,
-        "tabs": tabs,
-        "tab_add_options": _tab_add_options(),
+        "page": "home",
         "calendar_weeks": _month_grid(year, month, calendar_activity(year, month), selected_date),
         "calendar_label": f"{year}.{month:02d}",
         "selected_date": selected_date,
         "is_today": workspace["is_today"],
         "pinned": pinned,
-        "events": workspace["events"] if ctx != "knowledge" else list_events(limit=50),
-        "events_grouped": workspace["events_grouped"] if ctx != "knowledge" else group_events_by_date(list_events(limit=50)),
+        "events": workspace["events"],
+        "events_grouped": workspace["events_grouped"],
         "plan": workspace["plan"],
         "recent_events": workspace["recent"],
         "review": review,
@@ -140,6 +121,41 @@ def index(request: Request, ctx: str = "today", cal_date: str | None = None):
         "notion_status": notion_status,
         "status_labels": STATUS_LABELS,
         "status_options": ["inbox", "planned", "doing", "done", "deferred", "dropped"],
+    })
+
+@app.get("/projects", response_class=HTMLResponse)
+def projects_index(request: Request):
+    """Projects: its own nav destination (IA-0001), not a Home tab. Lists
+    every project name currently in use, derived from Events the same way
+    it always has been — just surfaced here instead of as a workspace tab."""
+    projects = [{"name": name, "count": len(context_events(f"project:{name}", limit=1000))} for name in distinct_projects()]
+    try:
+        notion_status = check_notion()
+    except Exception as e:
+        notion_status = {"ok": False, "error": str(e)}
+    return templates.TemplateResponse("projects.html", {
+        "request": request,
+        "page": "projects",
+        "projects": projects,
+        "notion_status": notion_status,
+    })
+
+@app.get("/projects/{name}", response_class=HTMLResponse)
+def project_detail(request: Request, name: str):
+    events = context_events(f"project:{name}", limit=500)
+    if not events:
+        raise HTTPException(404, "프로젝트를 찾을 수 없습니다")
+    try:
+        notion_status = check_notion()
+    except Exception as e:
+        notion_status = {"ok": False, "error": str(e)}
+    return templates.TemplateResponse("project_detail.html", {
+        "request": request,
+        "page": "projects",
+        "project_name": name,
+        "events_grouped": group_events_by_date(events),
+        "status_labels": STATUS_LABELS,
+        "notion_status": notion_status,
     })
 
 ATTACHMENT_DIR = Path(settings.attachment_dir)
@@ -181,19 +197,14 @@ def _save_upload(file: UploadFile) -> tuple[str, int]:
     return stored_name, size
 
 @app.post("/capture")
-def capture(text: str = Form(...), ctx: str = Form("today"), file: UploadFile | None = File(None)):
+def capture(text: str = Form(...), file: UploadFile | None = File(None)):
+    # UX-0001: no mandatory category, project, goal, tag, or priority on
+    # capture — role/area are inferred by the classifier only, never forced
+    # by which tab the user happened to be in (that "context-first" tagging
+    # went away with the CR-0011 tab bar it depended on).
     if not text.strip():
         raise HTTPException(400, "text required")
-    # Context-first: an Event captured while inside a workspace tab is
-    # tagged with that tab's context automatically (UX v2), unless it's the
-    # generic "today" or "knowledge" (no auto-classification yet) tab.
-    role_override = None
-    extra = {}
-    if ctx.startswith("project:"):
-        extra["project"] = ctx.split(":", 1)[1]
-    elif ctx.startswith("role:"):
-        role_override = ctx.split(":", 1)[1]
-    event_id = create_event(text.strip(), role_override=role_override, **extra)
+    event_id = create_event(text.strip())
     if file is not None and file.filename:
         # Event and attachment aren't in a single DB transaction (attachment
         # writes hit the filesystem too), so on any upload failure the Event
@@ -206,7 +217,7 @@ def capture(text: str = Form(...), ctx: str = Form("today"), file: UploadFile | 
         except HTTPException:
             delete_event(event_id)
             raise
-    return RedirectResponse(f"/?ctx={ctx}", status_code=303)
+    return RedirectResponse("/", status_code=303)
 
 @app.get("/attachments/{attachment_id}")
 def download_attachment(attachment_id: int):
@@ -227,65 +238,37 @@ def download_attachment(attachment_id: int):
         headers={"X-Content-Type-Options": "nosniff"},
     )
 
-@app.post("/tabs/add")
-def tabs_add(kind: str = Form(...), label: str = Form(...), icon: str = Form("tab"), value: str = Form("")):
-    """Add a workspace tab (CR-0011). 'preset' adds one of the suggested
-    role/knowledge tabs as-is; 'project' opens a tab scoped to a project
-    name (also reachable automatically once an Event uses that project)."""
-    if kind == "preset":
-        ctx = value
-    elif kind == "project":
-        name = value.strip()
-        if not name:
-            raise HTTPException(400, "프로젝트 이름을 입력하세요")
-        ctx = f"project:{name}"
-    else:
-        raise HTTPException(400, "알 수 없는 탭 종류입니다")
-    try:
-        add_workspace_tab(ctx, label, icon)
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    return RedirectResponse(f"/?ctx={ctx}", status_code=303)
-
-@app.post("/tabs/remove")
-def tabs_remove(ctx: str = Form(...)):
-    try:
-        remove_workspace_tab(ctx)
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-    return RedirectResponse("/?ctx=today", status_code=303)
-
 @app.post("/status/{event_id}")
-def status(event_id: int, status: str = Form(...), ctx: str = Form("today")):
+def status(event_id: int, status: str = Form(...)):
     update_status(event_id, status)
-    return RedirectResponse(f"/?ctx={ctx}", status_code=303)
+    return RedirectResponse("/", status_code=303)
 
 @app.post("/review")
-def review_action(ctx: str = Form("today")):
+def review_action():
     build_review()
-    return RedirectResponse(f"/?ctx={ctx}", status_code=303)
+    return RedirectResponse("/", status_code=303)
 
 @app.post("/reviews/reflection")
-def reflection_action(text: str = Form(...), ctx: str = Form("today")):
+def reflection_action(text: str = Form(...)):
     try:
         save_reflection(text.strip())
     except ValueError as e:
         raise HTTPException(400, str(e))
-    return RedirectResponse(f"/?ctx={ctx}", status_code=303)
+    return RedirectResponse("/", status_code=303)
 
 @app.post("/sync/notion")
-def notion_action(ctx: str = Form("today")):
+def notion_action():
     result = sync_notion()
     if not result["ok"]:
         raise HTTPException(400, result["error"])
-    return RedirectResponse(f"/?ctx={ctx}", status_code=303)
+    return RedirectResponse("/", status_code=303)
 
 @app.post("/sync/github")
-def github_action(ctx: str = Form("today")):
+def github_action():
     result = sync_github()
     if not result["ok"]:
         raise HTTPException(400, result["error"])
-    return RedirectResponse(f"/?ctx={ctx}", status_code=303)
+    return RedirectResponse("/", status_code=303)
 
 @app.post("/api/events")
 def api_create_event(item: EventIn):

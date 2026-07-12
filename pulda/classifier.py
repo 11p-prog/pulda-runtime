@@ -2,6 +2,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 import re
 
+from .timeutil import now_kst
+
 @dataclass
 class Classification:
     role: str
@@ -35,7 +37,7 @@ def _pick(text: str, mapping: dict[str, list[str]], default: str) -> str:
     return default
 
 def classify(text: str, now: datetime | None = None) -> Classification:
-    now = now or datetime.now()
+    now = now or now_kst()
     role = _pick(text, ROLE_KEYWORDS, "개인")
     area = _pick(text, AREA_KEYWORDS, "운영")
     kind = "event"

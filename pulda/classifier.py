@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date as date_cls
 import re
 
 from .timeutil import now_kst
@@ -56,18 +56,26 @@ def classify(text: str, now: datetime | None = None) -> Classification:
         urgency = 1
 
     due_date = None
+    target_date = now.date()
     if "오늘" in text:
         due_date = now.date().isoformat()
     elif "내일" in text:
-        due_date = (now.date() + timedelta(days=1)).isoformat()
+        target_date = now.date() + timedelta(days=1)
+        due_date = target_date.isoformat()
 
+    # scheduled_at must land on the same calendar day as due_date — a bug
+    # audit found "내일 오후 3시" producing due_date=tomorrow but
+    # scheduled_at=today 15:00, a self-contradictory record (CR-0007 audit
+    # finding #9). Always anchor the time-of-day onto target_date.
     scheduled_at = None
     m = re.search(r"(오전|오후)?\s*(\d{1,2})시", text)
     if m:
         hour = int(m.group(2))
         if m.group(1) == "오후" and hour < 12:
             hour += 12
-        scheduled_at = now.replace(hour=hour, minute=0, second=0, microsecond=0).isoformat()
+        scheduled_at = datetime.combine(target_date, now.time()).replace(
+            hour=hour, minute=0, second=0, microsecond=0
+        ).isoformat()
 
     return Classification(
         role=role, area=area, kind=kind, urgency=urgency,

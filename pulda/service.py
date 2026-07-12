@@ -418,8 +418,12 @@ def context_workspace(ctx: str, selected_date: str | None = None) -> dict:
     selected_date = selected_date or today
     is_today = selected_date == today
     if ctx == "knowledge":
+        # Knowledge has no capture path yet (sidebar still says "준비중"),
+        # but the date axis must behave the same as every other tab: picking
+        # a date shows that date's (currently empty) record, not a
+        # permanently blank stub regardless of which date is selected.
         return {
-            "events": [], "plan": [], "recent": [],
+            "events": [], "events_grouped": [], "plan": [], "recent": [],
             "attention": {"overdue": [], "deferred": [], "blocked": []},
             "ops": {"focus_count": 0, "waiting_count": 0, "blocked_count": 0, "completed_today": 0},
             "is_today": is_today, "selected_date": selected_date,

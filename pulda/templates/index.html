@@ -134,16 +134,61 @@
       </div>
     </header>
 
-    <!-- Workspace tabs: VS Code/Replit-style contexts. The active tab owns
-         the user's attention — this is the workspace, not a dashboard. -->
-    <div class="flex gap-1 px-10 pt-2 border-b border-outline-variant/10 overflow-x-auto sticky top-[64px] z-30 bg-surface-bright/90 glass-blur">
+    <!-- Workspace tabs: Replit-style tab strip (CR-0011) — user-managed,
+         not fixed categories. '오늘' is the only permanent tab; every
+         other tab can be closed with the × and new ones opened with +. -->
+    <div class="flex items-center gap-1 px-10 pt-2 border-b border-outline-variant/10 overflow-x-auto sticky top-[64px] z-30 bg-surface-bright/90 glass-blur min-w-0">
       {% for t in tabs %}
-      <a href="/?ctx={{ t.ctx }}"
-        class="flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium whitespace-nowrap rounded-t-lg border-b-2 transition-colors
+      <div class="group flex items-center gap-1 pl-4 pr-2 py-2.5 text-[13px] font-medium whitespace-nowrap rounded-t-lg border-b-2 transition-colors
           {% if t.ctx == ctx %}border-primary text-primary bg-surface-container-lowest{% else %}border-transparent text-on-surface-variant/60 hover:text-on-surface-variant hover:bg-surface-container-low{% endif %}">
-        <span class="material-symbols-outlined text-[16px]">{{ t.icon }}</span> {{ t.label }}
-      </a>
+        <a href="/?ctx={{ t.ctx }}" class="flex items-center gap-2">
+          <span class="material-symbols-outlined text-[16px]">{{ t.icon }}</span> {{ t.label }}
+        </a>
+        {% if t.removable %}
+        <form method="post" action="/tabs/remove" onsubmit="return confirm('&quot;{{ t.label }}&quot; 탭을 닫을까요? (기록된 Event는 삭제되지 않습니다)')">
+          <input type="hidden" name="ctx" value="{{ t.ctx }}"/>
+          <button type="submit" aria-label="{{ t.label }} 탭 닫기" class="w-5 h-5 flex items-center justify-center rounded-full text-on-surface-variant/40 opacity-0 group-hover:opacity-100 hover:bg-error/10 hover:text-error transition-opacity">
+            <span class="material-symbols-outlined text-[14px]">close</span>
+          </button>
+        </form>
+        {% endif %}
+      </div>
       {% endfor %}
+
+      <!-- Add-tab picker -->
+      <div class="relative ml-1" id="tab-add-wrap">
+        <button type="button" id="tab-add-trigger" aria-label="탭 추가"
+          class="flex items-center justify-center w-8 h-8 rounded-lg text-on-surface-variant/50 hover:text-primary hover:bg-primary/5 transition-colors mb-0.5">
+          <span class="material-symbols-outlined text-[18px]">add</span>
+        </button>
+        <div id="tab-add-menu" class="hidden absolute left-0 top-10 z-40 w-64 bg-surface-container-lowest rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.12)] border border-outline-variant/10 p-2">
+          {% if tab_add_options %}
+          <p class="text-[10px] uppercase tracking-wide text-on-surface-variant/50 px-2 pt-1 pb-1">추천 탭</p>
+          {% for p in tab_add_options %}
+          <form method="post" action="/tabs/add">
+            <input type="hidden" name="kind" value="preset"/>
+            <input type="hidden" name="value" value="{{ p.ctx }}"/>
+            <input type="hidden" name="label" value="{{ p.label }}"/>
+            <input type="hidden" name="icon" value="{{ p.icon }}"/>
+            <button type="submit" class="w-full flex items-center gap-2 text-left px-2 py-2 rounded-lg text-[13px] text-on-surface hover:bg-surface-container-low">
+              <span class="material-symbols-outlined text-[16px] text-on-surface-variant/60">{{ p.icon }}</span> {{ p.label }}
+            </button>
+          </form>
+          {% endfor %}
+          <div class="border-t border-outline-variant/10 my-1"></div>
+          {% endif %}
+          <p class="text-[10px] uppercase tracking-wide text-on-surface-variant/50 px-2 pt-1 pb-1">프로젝트 탭 만들기</p>
+          <form method="post" action="/tabs/add" class="flex items-center gap-1 px-2 pb-2">
+            <input type="hidden" name="kind" value="project"/>
+            <input type="hidden" name="icon" value="folder_open"/>
+            <input type="text" name="value" required placeholder="프로젝트 이름"
+              class="flex-1 text-[12px] rounded-lg border border-outline-variant/20 bg-surface-bright px-2 py-1.5 focus:ring-1 focus:ring-primary focus:outline-none"
+              oninput="this.form.label.value = this.value ? ('Project: ' + this.value) : ''"/>
+            <input type="hidden" name="label" value=""/>
+            <button type="submit" class="text-[12px] font-medium text-primary px-2 py-1.5 rounded-lg hover:bg-primary/10">추가</button>
+          </form>
+        </div>
+      </div>
     </div>
 
     <div class="max-w-4xl mx-auto w-full px-10 py-10 pb-36 flex flex-col gap-14">
@@ -490,6 +535,21 @@
     }
   });
   ta.focus();
+})();
+
+// Add-tab picker: click + to open, click elsewhere to close (CR-0011).
+(function () {
+  var trigger = document.getElementById('tab-add-trigger');
+  var menu = document.getElementById('tab-add-menu');
+  var wrap = document.getElementById('tab-add-wrap');
+  if (!trigger || !menu || !wrap) return;
+  trigger.addEventListener('click', function (e) {
+    e.stopPropagation();
+    menu.classList.toggle('hidden');
+  });
+  document.addEventListener('click', function (e) {
+    if (!wrap.contains(e.target)) menu.classList.add('hidden');
+  });
 })();
 
 // Automatic day rollover (Review v3 #2): "Today" must follow real time

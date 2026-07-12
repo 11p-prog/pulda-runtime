@@ -45,14 +45,35 @@ def get_event(event_id: int):
     return dict(row) if row else None
 
 def delete_event(event_id: int) -> None:
-    """Hard-delete an event and any attachments it owns. Used to roll back
-    an Event created by /capture when the accompanying file upload fails,
-    so a rejected attachment never leaves a silent empty Event behind
-    (CR-0007 audit finding #3)."""
+    """Hard-delete an event, its attachments, and its status-change history.
+    Used to roll back an Event created by /capture when the accompanying
+    file upload fails, so a rejected attachment never leaves a silent empty
+    Event behind (CR-0007 audit finding #3) — and, per user request
+    2026-07-13, also user-facing for purging genuine duplicate captures
+    (e.g. a double-tapped submit button) where no meaningful history exists
+    yet and a permanent record would just be noise."""
     with connect() as conn:
         conn.execute("DELETE FROM attachments WHERE event_id=?", (event_id,))
+        conn.execute("DELETE FROM event_history WHERE event_id=?", (event_id,))
         conn.execute("DELETE FROM events WHERE id=?", (event_id,))
     audit("delete_event", str(event_id), "success", "")
+
+def soft_delete_event(event_id: int) -> None:
+    """Hide an event from all lists without erasing it (user request
+    2026-07-13: normal deletes should stay in the record, e.g. for later
+    review, while a hard delete is reserved for accidental duplicates).
+    Also logs the deletion as a status-change-shaped history entry so it
+    still shows up in the Event feed rather than silently vanishing."""
+    event = get_event(event_id)
+    if not event:
+        raise ValueError("event not found")
+    if event.get("deleted_at"):
+        return
+    now = now_kst().isoformat(timespec="seconds")
+    with connect() as conn:
+        conn.execute("UPDATE events SET deleted_at=?, updated_at=? WHERE id=?", (now, now, event_id))
+    audit("soft_delete_event", str(event_id), "success", "")
+    record_status_change(event_id, event["text"], event["status"], "deleted", now)
 
 PATCHABLE_FIELDS = {
     "status", "role", "area", "kind", "urgency", "importance", "due_date",
@@ -91,10 +112,10 @@ def defer_event(event_id: int, reason: str, next_review_at: str | None = None) -
     return get_event(event_id)
 
 def list_events(status: str | None = None, limit: int = 100):
-    q = "SELECT * FROM events"
+    q = "SELECT * FROM events WHERE deleted_at IS NULL"
     params = []
     if status:
-        q += " WHERE status=?"
+        q += " AND status=?"
         params.append(status)
     q += " ORDER BY importance DESC, urgency DESC, created_at DESC LIMIT ?"
     params.append(limit)
@@ -161,16 +182,16 @@ def attention_items() -> dict:
     today = today_kst().isoformat()
     with connect() as conn:
         overdue = conn.execute(
-            """SELECT * FROM events WHERE status NOT IN ('done','dropped')
+            """SELECT * FROM events WHERE deleted_at IS NULL AND status NOT IN ('done','dropped')
             AND due_date IS NOT NULL AND due_date < ?
             ORDER BY due_date ASC""",
             (today,),
         ).fetchall()
         deferred = conn.execute(
-            "SELECT * FROM events WHERE status='deferred' ORDER BY next_review_at ASC, updated_at DESC"
+            "SELECT * FROM events WHERE deleted_at IS NULL AND status='deferred' ORDER BY next_review_at ASC, updated_at DESC"
         ).fetchall()
         blocked = conn.execute(
-            "SELECT * FROM events WHERE blocked_by IS NOT NULL AND status NOT IN ('done','dropped') ORDER BY updated_at DESC"
+            "SELECT * FROM events WHERE deleted_at IS NULL AND blocked_by IS NOT NULL AND status NOT IN ('done','dropped') ORDER BY updated_at DESC"
         ).fetchall()
     return {
         "overdue": [dict(r) for r in overdue],
@@ -183,7 +204,7 @@ def today_plan():
     with connect() as conn:
         rows = conn.execute(
             """SELECT * FROM events
-            WHERE status NOT IN ('done','dropped')
+            WHERE deleted_at IS NULL AND status NOT IN ('done','dropped')
               AND (due_date=? OR urgency>=4 OR importance>=4)
             ORDER BY importance DESC, urgency DESC, created_at ASC""",
             (today,),
@@ -194,10 +215,10 @@ def build_review() -> dict:
     today = today_kst().isoformat()
     with connect() as conn:
         done = conn.execute(
-            "SELECT * FROM events WHERE status='done' AND substr(updated_at,1,10)=?", (today,)
+            "SELECT * FROM events WHERE deleted_at IS NULL AND status='done' AND substr(updated_at,1,10)=?", (today,)
         ).fetchall()
         open_rows = conn.execute(
-            "SELECT * FROM events WHERE status NOT IN ('done','dropped') ORDER BY importance DESC, urgency DESC"
+            "SELECT * FROM events WHERE deleted_at IS NULL AND status NOT IN ('done','dropped') ORDER BY importance DESC, urgency DESC"
         ).fetchall()
     summary = (
         f"# {today} Daily Review\n\n"
@@ -277,7 +298,7 @@ def life_balance() -> dict:
     metric, not a signal, so it's omitted rather than shown empty."""
     with connect() as conn:
         rows = conn.execute(
-            "SELECT role, area FROM events WHERE status NOT IN ('done','dropped')"
+            "SELECT role, area FROM events WHERE deleted_at IS NULL AND status NOT IN ('done','dropped')"
         ).fetchall()
     counts = {"business": 0, "family": 0, "health": 0, "learning": 0}
     for r in rows:
@@ -304,17 +325,17 @@ def decision_support() -> list[dict]:
     insights: list[dict] = []
     with connect() as conn:
         overdue = conn.execute(
-            "SELECT count(*) c FROM events WHERE status NOT IN ('done','dropped') AND due_date IS NOT NULL AND due_date < ?",
+            "SELECT count(*) c FROM events WHERE deleted_at IS NULL AND status NOT IN ('done','dropped') AND due_date IS NOT NULL AND due_date < ?",
             (today,),
         ).fetchone()["c"]
         blocked = conn.execute(
-            "SELECT text FROM events WHERE blocked_by IS NOT NULL AND status NOT IN ('done','dropped') ORDER BY updated_at DESC LIMIT 3"
+            "SELECT text FROM events WHERE deleted_at IS NULL AND blocked_by IS NOT NULL AND status NOT IN ('done','dropped') ORDER BY updated_at DESC LIMIT 3"
         ).fetchall()
         cash = conn.execute(
-            "SELECT count(*) c FROM events WHERE area='재무' AND status NOT IN ('done','dropped')"
+            "SELECT count(*) c FROM events WHERE deleted_at IS NULL AND area='재무' AND status NOT IN ('done','dropped')"
         ).fetchone()["c"]
         stale_deferred = conn.execute(
-            "SELECT count(*) c FROM events WHERE status='deferred' AND next_review_at IS NOT NULL AND next_review_at < ?",
+            "SELECT count(*) c FROM events WHERE deleted_at IS NULL AND status='deferred' AND next_review_at IS NOT NULL AND next_review_at < ?",
             (today,),
         ).fetchone()["c"]
 
@@ -337,19 +358,19 @@ def operations_summary() -> dict:
     focus_count = len(today_plan())
     with connect() as conn:
         waiting = conn.execute(
-            "SELECT count(*) c FROM events WHERE status='inbox'"
+            "SELECT count(*) c FROM events WHERE deleted_at IS NULL AND status='inbox'"
         ).fetchone()["c"]
         blocked = conn.execute(
-            "SELECT count(*) c FROM events WHERE blocked_by IS NOT NULL AND status NOT IN ('done','dropped')"
+            "SELECT count(*) c FROM events WHERE deleted_at IS NULL AND blocked_by IS NOT NULL AND status NOT IN ('done','dropped')"
         ).fetchone()["c"]
         completed_today = conn.execute(
-            "SELECT count(*) c FROM events WHERE status='done' AND substr(updated_at,1,10)=?", (today,)
+            "SELECT count(*) c FROM events WHERE deleted_at IS NULL AND status='done' AND substr(updated_at,1,10)=?", (today,)
         ).fetchone()["c"]
         family_priority = conn.execute(
-            "SELECT count(*) c FROM events WHERE role='가족' AND status NOT IN ('done','dropped') AND (urgency>=4 OR importance>=4)"
+            "SELECT count(*) c FROM events WHERE deleted_at IS NULL AND role='가족' AND status NOT IN ('done','dropped') AND (urgency>=4 OR importance>=4)"
         ).fetchone()["c"] > 0
         cash_caution = conn.execute(
-            "SELECT count(*) c FROM events WHERE area='재무' AND status NOT IN ('done','dropped')"
+            "SELECT count(*) c FROM events WHERE deleted_at IS NULL AND area='재무' AND status NOT IN ('done','dropped')"
         ).fetchone()["c"] > 0
     signals = []
     if family_priority:
@@ -429,10 +450,10 @@ def _attach_files(events: list[dict]) -> list[dict]:
 
 def context_events(ctx: str, limit: int = 500):
     where, param = _ctx_clause(ctx)
-    q = "SELECT * FROM events"
+    q = "SELECT * FROM events WHERE deleted_at IS NULL"
     params: list = []
     if where:
-        q += f" WHERE {where}"
+        q += f" AND {where}"
         params.append(param)
     q += " ORDER BY created_at DESC LIMIT ?"
     params.append(limit)
@@ -561,7 +582,7 @@ def calendar_activity(year: int, month: int) -> dict[str, int]:
     prefix = f"{year:04d}-{month:02d}"
     with connect() as conn:
         rows = conn.execute(
-            "SELECT substr(created_at,1,10) d, count(*) c FROM events WHERE substr(created_at,1,7)=? GROUP BY d",
+            "SELECT substr(created_at,1,10) d, count(*) c FROM events WHERE deleted_at IS NULL AND substr(created_at,1,7)=? GROUP BY d",
             (prefix,),
         ).fetchall()
     return {r["d"]: r["c"] for r in rows}

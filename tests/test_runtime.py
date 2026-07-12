@@ -9,7 +9,7 @@ from pulda.db import init_db
 from pulda.classifier import classify
 from pulda.service import (
     create_event, list_events, update_status, build_review, update_event, defer_event,
-    get_event, delete_event, context_workspace, add_attachment, group_events_by_date,
+    get_event, delete_event, soft_delete_event, context_workspace, add_attachment, group_events_by_date,
     context_events, distinct_projects,
 )
 from pulda.timeutil import date_label, today_kst
@@ -126,6 +126,31 @@ def test_status_change_is_recorded_and_appears_in_feed():
     update_status(event_id, "done")
     workspace2 = context_workspace("today", selected_date=today_kst().isoformat())
     assert len([e for e in workspace2["recent"] if e.get("kind") == "status_change" and e["event_id"] == event_id]) == 2
+
+def test_soft_delete_hides_event_but_keeps_history():
+    # User request 2026-07-13: a normal delete must stay in the record
+    # (soft-delete) and log a visible history entry, not vanish silently.
+    event_id = create_event("숨김 삭제 테스트 이벤트")
+    soft_delete_event(event_id)
+    all_ids = [e["id"] for e in context_events("today", limit=1000)]
+    assert event_id not in all_ids
+    # The event row itself still exists (not purged) and is flagged deleted.
+    event = get_event(event_id)
+    assert event is not None
+    assert event["deleted_at"] is not None
+    workspace = context_workspace("today", selected_date=today_kst().isoformat())
+    deletions = [e for e in workspace["recent"] if e.get("kind") == "status_change" and e["event_id"] == event_id and e["to_status"] == "deleted"]
+    assert len(deletions) == 1
+
+def test_hard_delete_purges_event_and_history():
+    # Reserved for accidental duplicates (e.g. double-tapped submit) where
+    # a permanent record would just be noise.
+    event_id = create_event("완전 삭제 테스트 이벤트")
+    update_status(event_id, "doing")
+    delete_event(event_id)
+    assert get_event(event_id) is None
+    workspace = context_workspace("today", selected_date=today_kst().isoformat())
+    assert not any(e.get("event_id") == event_id for e in workspace["recent"] if e.get("kind") == "status_change")
 
 def test_capture_rejects_disallowed_file_type_and_rolls_back_event():
     # CR-0007 audit findings #3/#4: server must validate file type itself

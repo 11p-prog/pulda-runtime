@@ -69,6 +69,7 @@ NEW_EVENT_COLUMNS = {
     "defer_reason": "TEXT",
     "next_review_at": "TEXT",
     "notion_page_id": "TEXT",
+    "deleted_at": "TEXT",
 }
 
 def _migrate(conn: sqlite3.Connection) -> None:

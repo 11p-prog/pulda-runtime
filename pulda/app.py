@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from .db import init_db
 from .service import (
     create_event, list_events, update_status, today_plan, build_review, latest_review, health,
-    get_event, update_event, defer_event, attention_items, delete_event,
+    get_event, update_event, defer_event, attention_items, delete_event, soft_delete_event,
     life_balance, decision_support, operations_summary, save_reflection,
     distinct_projects, context_workspace, context_events, calendar_activity, review_for_date,
     add_attachment, get_attachment, group_events_by_date,
@@ -25,7 +25,7 @@ templates = Jinja2Templates(directory="pulda/templates")
 
 STATUS_LABELS = {
     "inbox": "수집됨", "planned": "계획됨", "doing": "진행중",
-    "done": "완료", "deferred": "보류", "dropped": "중단",
+    "done": "완료", "deferred": "보류", "dropped": "중단", "deleted": "삭제됨",
 }
 
 class EventIn(BaseModel):
@@ -245,6 +245,23 @@ def status(event_id: int, status: str = Form(...), redirect_date: str | None = F
     update_status(event_id, status)
     # Only pin the date if it isn't the live "today" — otherwise this would
     # incorrectly flip an unpinned Today view into a pinned one.
+    if redirect_date and redirect_date != today_kst().isoformat():
+        dest = f"/?cal_date={redirect_date}"
+    else:
+        dest = "/"
+    return RedirectResponse(dest, status_code=303)
+
+@app.post("/events/{event_id}/delete")
+def delete_event_route(event_id: int, mode: str = Form("soft"), redirect_date: str | None = Form(None)):
+    """User-facing delete (2026-07-13). `mode=soft` (default) hides the
+    event but keeps it and its history — the normal case. `mode=hard`
+    permanently purges it with no trace, reserved for genuine duplicate
+    captures (e.g. a double-tapped submit) where a permanent record would
+    just be noise."""
+    if mode == "hard":
+        delete_event(event_id)
+    else:
+        soft_delete_event(event_id)
     if redirect_date and redirect_date != today_kst().isoformat():
         dest = f"/?cal_date={redirect_date}"
     else:

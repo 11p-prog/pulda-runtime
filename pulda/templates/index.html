@@ -217,6 +217,22 @@
                   </select>
                   <button class="text-[11px] text-primary font-medium px-2">변경</button>
                 </form>
+                <details class="relative inline-block">
+                  <summary class="list-none cursor-pointer text-[11px] text-error/80 hover:text-error px-1">삭제</summary>
+                  <div class="absolute z-10 right-0 mt-1 p-2 rounded-lg bg-surface-container shadow-lg border border-outline-variant/20 w-48 space-y-1">
+                    <p class="text-[11px] text-on-surface-variant/70 px-1">정말 삭제하시겠습니까?</p>
+                    <form method="post" action="/events/{{ e.id }}/delete">
+                      <input type="hidden" name="redirect_date" value="{{ selected_date }}">
+                      <input type="hidden" name="mode" value="soft">
+                      <button class="w-full text-left text-[11px] text-on-surface hover:bg-surface-container-low rounded px-1 py-1">숨김 삭제 (기록 보관)</button>
+                    </form>
+                    <form method="post" action="/events/{{ e.id }}/delete">
+                      <input type="hidden" name="redirect_date" value="{{ selected_date }}">
+                      <input type="hidden" name="mode" value="hard">
+                      <button class="w-full text-left text-[11px] text-error hover:bg-error-container rounded px-1 py-1">완전 삭제 (되돌릴 수 없음)</button>
+                    </form>
+                  </div>
+                </details>
               </div>
             </div>
             {% else %}
@@ -308,6 +324,22 @@
                 </select>
                 <button class="text-[11px] text-primary font-medium px-2">변경</button>
               </form>
+              <details class="relative inline-block">
+                <summary class="list-none cursor-pointer text-[11px] text-error/80 hover:text-error px-1">삭제</summary>
+                <div class="absolute z-10 right-0 mt-1 p-2 rounded-lg bg-surface-container shadow-lg border border-outline-variant/20 w-48 space-y-1">
+                  <p class="text-[11px] text-on-surface-variant/70 px-1">정말 삭제하시겠습니까?</p>
+                  <form method="post" action="/events/{{ e.id }}/delete">
+                    <input type="hidden" name="redirect_date" value="{{ selected_date }}">
+                    <input type="hidden" name="mode" value="soft">
+                    <button class="w-full text-left text-[11px] text-on-surface hover:bg-surface-container-low rounded px-1 py-1">숨김 삭제 (기록 보관)</button>
+                  </form>
+                  <form method="post" action="/events/{{ e.id }}/delete">
+                    <input type="hidden" name="redirect_date" value="{{ selected_date }}">
+                    <input type="hidden" name="mode" value="hard">
+                    <button class="w-full text-left text-[11px] text-error hover:bg-error-container rounded px-1 py-1">완전 삭제 (되돌릴 수 없음)</button>
+                  </form>
+                </div>
+              </details>
               {% if e.attachments %}
               <span class="w-full flex flex-wrap gap-2 mt-1">
                 {% for a in e.attachments %}
@@ -332,18 +364,18 @@
         <div class="overflow-x-auto rounded-xl border border-outline-variant/10">
           <table class="w-full text-[13px]">
             <thead class="bg-surface-container-low text-on-surface-variant/70">
-              <tr><th class="text-left p-3 font-medium w-20">수집시간</th><th class="text-left p-3 font-medium">내용</th><th class="text-left p-3 font-medium">역할/영역</th><th class="text-left p-3 font-medium">중요/긴급</th><th class="text-left p-3 font-medium">상태</th><th class="text-left p-3 font-medium">첨부</th></tr>
+              <tr><th class="text-left p-3 font-medium w-20">수집시간</th><th class="text-left p-3 font-medium">내용</th><th class="text-left p-3 font-medium">역할/영역</th><th class="text-left p-3 font-medium">중요/긴급</th><th class="text-left p-3 font-medium">상태</th><th class="text-left p-3 font-medium">첨부</th><th class="text-left p-3 font-medium">삭제</th></tr>
             </thead>
             <tbody>
               {% for grp in events_grouped %}
               <tr class="border-t border-outline-variant/10 bg-surface-container-low/60">
-                <td colspan="6" class="px-3 py-1.5 text-[11px] font-semibold text-on-surface-variant/70 tracking-wide">{{ grp.label }}</td>
+                <td colspan="7" class="px-3 py-1.5 text-[11px] font-semibold text-on-surface-variant/70 tracking-wide">{{ grp.label }}</td>
               </tr>
               {% for e in grp.events %}
               {% if e.kind == 'status_change' %}
               <tr class="border-t border-outline-variant/10 text-on-surface-variant/50">
                 <td class="p-3 tabular-nums whitespace-nowrap">{{ e.created_at[11:16] if e.created_at|length > 11 else e.created_at }}</td>
-                <td class="p-3" colspan="5">
+                <td class="p-3" colspan="6">
                   <span class="material-symbols-outlined text-[13px] align-middle opacity-60">history</span>
                   {{ e.text }} · {{ status_labels[e.from_status] }} → {{ status_labels[e.to_status] }}
                 </td>
@@ -369,6 +401,24 @@
                     <span class="material-symbols-outlined text-[15px]">attach_file</span>
                   </a>
                   {% endfor %}
+                </td>
+                <td class="p-3">
+                  <details class="relative inline-block">
+                    <summary class="list-none cursor-pointer text-[11px] text-error/80 hover:text-error px-1">삭제</summary>
+                    <div class="absolute z-10 right-0 mt-1 p-2 rounded-lg bg-surface-container shadow-lg border border-outline-variant/20 w-48 space-y-1">
+                      <p class="text-[11px] text-on-surface-variant/70 px-1">정말 삭제하시겠습니까?</p>
+                      <form method="post" action="/events/{{ e.id }}/delete">
+                        <input type="hidden" name="redirect_date" value="{{ selected_date }}">
+                        <input type="hidden" name="mode" value="soft">
+                        <button class="w-full text-left text-[11px] text-on-surface hover:bg-surface-container-low rounded px-1 py-1">숨김 삭제 (기록 보관)</button>
+                      </form>
+                      <form method="post" action="/events/{{ e.id }}/delete">
+                        <input type="hidden" name="redirect_date" value="{{ selected_date }}">
+                        <input type="hidden" name="mode" value="hard">
+                        <button class="w-full text-left text-[11px] text-error hover:bg-error-container rounded px-1 py-1">완전 삭제 (되돌릴 수 없음)</button>
+                      </form>
+                    </div>
+                  </details>
                 </td>
               </tr>
               {% endif %}

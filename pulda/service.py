@@ -105,10 +105,55 @@ def update_status(event_id: int, status: str) -> None:
     allowed = {"inbox","planned","doing","done","deferred","dropped"}
     if status not in allowed:
         raise ValueError("invalid status")
+    event = get_event(event_id)
+    if not event:
+        raise ValueError("event not found")
     now = now_kst().isoformat(timespec="seconds")
     with connect() as conn:
         conn.execute("UPDATE events SET status=?, updated_at=? WHERE id=?", (status, now, event_id))
     audit("update_status", str(event_id), "success", status)
+    if event["status"] != status:
+        record_status_change(event_id, event["text"], event["status"], status, now)
+
+def record_status_change(event_id: int, event_text: str, from_status: str, to_status: str, changed_at: str | None = None) -> None:
+    """Log a status transition so it shows up as its own entry in the
+    Event feed (user request 2026-07-12): a status change is activity too,
+    not something that should vanish once an event leaves the candidate
+    list."""
+    changed_at = changed_at or now_kst().isoformat(timespec="seconds")
+    with connect() as conn:
+        conn.execute(
+            "INSERT INTO event_history(event_id,event_text,from_status,to_status,changed_at) VALUES(?,?,?,?,?)",
+            (event_id, event_text, from_status, to_status, changed_at),
+        )
+
+def status_history_feed(scope_date: str | None = None) -> list[dict]:
+    """Status-change history formatted as feed items: same shape contract
+    as an event dict (`created_at`, `status`) so it can be merged straight
+    into the existing recent/grouped-feed rendering, tagged `kind` so the
+    template can render it as a lightweight history row instead of a full
+    event row."""
+    q = "SELECT * FROM event_history"
+    params: list = []
+    if scope_date:
+        q += " WHERE substr(changed_at,1,10)=?"
+        params.append(scope_date)
+    q += " ORDER BY changed_at DESC"
+    with connect() as conn:
+        rows = [dict(r) for r in conn.execute(q, params).fetchall()]
+    return [
+        {
+            "kind": "status_change",
+            "id": f"h{r['id']}",
+            "event_id": r["event_id"],
+            "text": r["event_text"],
+            "from_status": r["from_status"],
+            "to_status": r["to_status"],
+            "status": r["to_status"],
+            "created_at": r["changed_at"],
+        }
+        for r in rows
+    ]
 
 def attention_items() -> dict:
     """Events needing follow-up: overdue, deferred, or blocked — per
@@ -431,7 +476,17 @@ def context_workspace(ctx: str, selected_date: str | None = None) -> dict:
     # past events under a "최근 Event"/"오늘" label would misrepresent what
     # happened). The "전체 Event" table is date-scoped on a historical day
     # too; only the live Today view legitimately shows the whole context.
-    recent = sorted(day_events, key=lambda e: e["created_at"], reverse=True)
+    day_events = [dict(e, kind="event") for e in day_events]
+
+    # Status changes are activity too (user request 2026-07-12): once an
+    # event leaves the "실행 후보" candidate list its status could no
+    # longer be changed from anywhere, and there was no visible record of
+    # what changed and when. They're merged into the same feed as
+    # lightweight `kind="status_change"` entries, scoped the same way the
+    # events themselves are.
+    history_scope = selected_date if not is_today else None
+    day_history = status_history_feed(history_scope)
+    recent = sorted(day_events + day_history, key=lambda e: e["created_at"], reverse=True)
 
     if is_today:
         plan = sorted(
@@ -448,7 +503,10 @@ def context_workspace(ctx: str, selected_date: str | None = None) -> dict:
         )
         blocked = [e for e in open_events if e["blocked_by"]]
         waiting = [e for e in all_events if e["status"] == "inbox"]
-        events = all_events
+        events = sorted(
+            [dict(e, kind="event") for e in all_events] + status_history_feed(),
+            key=lambda e: e["created_at"], reverse=True,
+        )
     else:
         # Historical or future day: no live-state sections — a past date
         # shows what actually happened, a future date shows what's planned
@@ -456,7 +514,7 @@ def context_workspace(ctx: str, selected_date: str | None = None) -> dict:
         plan = sorted(day_events, key=lambda e: (-e["importance"], -e["urgency"], e["created_at"]))
         overdue, deferred, blocked = [], [], []
         waiting = [e for e in day_events if e["status"] == "inbox"]
-        events = day_events
+        events = sorted(day_events + day_history, key=lambda e: e["created_at"], reverse=True)
 
     return {
         "events": events,

@@ -211,6 +211,7 @@
               <div class="flex items-center gap-3">
                 <span class="text-[11px] text-on-surface-variant/50">{{ e.role }} / {{ e.area }}</span>
                 <form method="post" action="/status/{{ e.id }}" class="flex items-center gap-1">
+                  <input type="hidden" name="redirect_date" value="{{ selected_date }}">
                   <select name="status" class="text-[11px] rounded-lg border-none bg-surface-container-low py-1">
                     {% for s in status_options %}<option value="{{ s }}" {{ 'selected' if s == e.status }}>{{ status_labels[s] }}</option>{% endfor %}
                   </select>
@@ -272,6 +273,13 @@
         <h3 class="text-[13px] font-medium text-on-surface-variant mb-4">{{ '최근 Event' if is_today else selected_date + (' 예정' if is_future else ' 기록') }}</h3>
         <div class="space-y-1">
           {% for e in recent_events %}
+          {% if e.kind == 'status_change' %}
+          <div class="flex items-center gap-3 py-2 px-3 text-on-surface-variant/60">
+            <span class="material-symbols-outlined text-[15px] shrink-0 opacity-60">history</span>
+            <span class="text-[13px] truncate min-w-0">{{ e.text }} · {{ status_labels[e.from_status] }} → {{ status_labels[e.to_status] }}</span>
+            <span class="text-[11px] shrink-0 ml-auto">{{ e.created_at[11:16] if e.created_at|length > 11 else e.created_at }}</span>
+          </div>
+          {% else %}
           <details class="group rounded-xl hover:bg-surface-container-low px-3">
             <summary class="list-none cursor-pointer flex items-center justify-between gap-3 py-2.5">
               <div class="flex items-center gap-3 min-w-0">
@@ -289,10 +297,17 @@
               </div>
               <span class="text-[11px] text-on-surface-variant/50 shrink-0">{{ e.created_at[11:16] if e.created_at|length > 11 else e.created_at }}</span>
             </summary>
-            <div class="pl-3 pb-3 text-[12px] text-on-surface-variant/70 flex flex-wrap gap-x-4 gap-y-1">
+            <div class="pl-3 pb-3 text-[12px] text-on-surface-variant/70 flex flex-wrap items-center gap-x-4 gap-y-1">
               <span>컨텍스트: {{ e.role }} / {{ e.area }}{% if e.project %} · {{ e.project }}{% endif %}</span>
               <span>기록 시각: {{ e.created_at }}</span>
               <span>중요/긴급: {{ e.importance }}/{{ e.urgency }}</span>
+              <form method="post" action="/status/{{ e.id }}" class="flex items-center gap-1">
+                <input type="hidden" name="redirect_date" value="{{ selected_date }}">
+                <select name="status" class="text-[11px] rounded-lg border-none bg-surface-container-low py-1">
+                  {% for s in status_options %}<option value="{{ s }}" {{ 'selected' if s == e.status }}>{{ status_labels[s] }}</option>{% endfor %}
+                </select>
+                <button class="text-[11px] text-primary font-medium px-2">변경</button>
+              </form>
               {% if e.attachments %}
               <span class="w-full flex flex-wrap gap-2 mt-1">
                 {% for a in e.attachments %}
@@ -304,6 +319,7 @@
               {% endif %}
             </div>
           </details>
+          {% endif %}
           {% else %}
           <p class="text-[15px] text-on-surface-variant/40 py-2">아직 기록된 Event가 없습니다.</p>
           {% endfor %}
@@ -324,12 +340,29 @@
                 <td colspan="6" class="px-3 py-1.5 text-[11px] font-semibold text-on-surface-variant/70 tracking-wide">{{ grp.label }}</td>
               </tr>
               {% for e in grp.events %}
+              {% if e.kind == 'status_change' %}
+              <tr class="border-t border-outline-variant/10 text-on-surface-variant/50">
+                <td class="p-3 tabular-nums whitespace-nowrap">{{ e.created_at[11:16] if e.created_at|length > 11 else e.created_at }}</td>
+                <td class="p-3" colspan="5">
+                  <span class="material-symbols-outlined text-[13px] align-middle opacity-60">history</span>
+                  {{ e.text }} · {{ status_labels[e.from_status] }} → {{ status_labels[e.to_status] }}
+                </td>
+              </tr>
+              {% else %}
               <tr class="border-t border-outline-variant/10">
                 <td class="p-3 text-on-surface-variant/60 tabular-nums whitespace-nowrap">{{ e.created_at[11:16] if e.created_at|length > 11 else e.created_at }}</td>
                 <td class="p-3">{{ e.text }}</td>
                 <td class="p-3 text-on-surface-variant/70">{{ e.role }} / {{ e.area }}</td>
                 <td class="p-3 text-on-surface-variant/70">{{ e.importance }}/{{ e.urgency }}</td>
-                <td class="p-3">{{ status_labels[e.status] }}</td>
+                <td class="p-3">
+                  <form method="post" action="/status/{{ e.id }}" class="flex items-center gap-1">
+                    <input type="hidden" name="redirect_date" value="{{ selected_date }}">
+                    <select name="status" class="text-[11px] rounded-lg border-none bg-surface-container-low py-1">
+                      {% for s in status_options %}<option value="{{ s }}" {{ 'selected' if s == e.status }}>{{ status_labels[s] }}</option>{% endfor %}
+                    </select>
+                    <button class="text-[11px] text-primary font-medium px-1">변경</button>
+                  </form>
+                </td>
                 <td class="p-3">
                   {% for a in e.attachments %}
                   <a href="/attachments/{{ a.id }}" target="_blank" class="inline-flex items-center gap-1 text-primary hover:underline mr-2" title="{{ a.original_name }}">
@@ -338,6 +371,7 @@
                   {% endfor %}
                 </td>
               </tr>
+              {% endif %}
               {% endfor %}
               {% else %}
               <tr><td colspan="6" class="p-3 text-on-surface-variant/40">아직 기록된 Event가 없습니다.</td></tr>

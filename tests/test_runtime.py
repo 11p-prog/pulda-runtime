@@ -108,6 +108,25 @@ def test_context_workspace_labels_future_date_as_upcoming_not_past():
     assert past_ws["is_past"] is True
     assert past_ws["is_future"] is False
 
+def test_status_change_is_recorded_and_appears_in_feed():
+    # User request: status changes must be visible in the Event feed even
+    # after the event leaves the "실행 후보" candidate list, not just a
+    # silent column update.
+    event_id = create_event("상태 변경 이력 테스트 이벤트")
+    update_status(event_id, "doing")
+    update_status(event_id, "done")
+
+    workspace = context_workspace("today", selected_date=today_kst().isoformat())
+    history_entries = [e for e in workspace["recent"] if e.get("kind") == "status_change" and e["event_id"] == event_id]
+    assert len(history_entries) == 2
+    transitions = {(e["from_status"], e["to_status"]) for e in history_entries}
+    assert ("inbox", "doing") in transitions
+    assert ("doing", "done") in transitions
+    # No-op status update (same value) must not create a spurious entry.
+    update_status(event_id, "done")
+    workspace2 = context_workspace("today", selected_date=today_kst().isoformat())
+    assert len([e for e in workspace2["recent"] if e.get("kind") == "status_change" and e["event_id"] == event_id]) == 2
+
 def test_capture_rejects_disallowed_file_type_and_rolls_back_event():
     # CR-0007 audit findings #3/#4: server must validate file type itself
     # (UI `accept` is not a security boundary), and a rejected upload must

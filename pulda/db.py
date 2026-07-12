@@ -41,6 +41,14 @@ CREATE TABLE IF NOT EXISTS audit_log (
   detail TEXT,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS event_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id INTEGER NOT NULL REFERENCES events(id),
+  event_text TEXT NOT NULL,
+  from_status TEXT NOT NULL,
+  to_status TEXT NOT NULL,
+  changed_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS attachments (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   event_id INTEGER NOT NULL REFERENCES events(id),

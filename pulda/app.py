@@ -241,9 +241,15 @@ def download_attachment(attachment_id: int):
     )
 
 @app.post("/status/{event_id}")
-def status(event_id: int, status: str = Form(...)):
+def status(event_id: int, status: str = Form(...), redirect_date: str | None = Form(None)):
     update_status(event_id, status)
-    return RedirectResponse("/", status_code=303)
+    # Only pin the date if it isn't the live "today" — otherwise this would
+    # incorrectly flip an unpinned Today view into a pinned one.
+    if redirect_date and redirect_date != today_kst().isoformat():
+        dest = f"/?cal_date={redirect_date}"
+    else:
+        dest = "/"
+    return RedirectResponse(dest, status_code=303)
 
 @app.post("/review")
 def review_action():

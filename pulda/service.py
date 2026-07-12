@@ -1,9 +1,10 @@
 from datetime import datetime, date
+from .timeutil import now_kst, today_kst
 from .db import connect
 from .classifier import classify
 
 def audit(action: str, target: str | None, status: str, detail: str = "") -> None:
-    now = datetime.now().isoformat(timespec="seconds")
+    now = now_kst().isoformat(timespec="seconds")
     with connect() as conn:
         conn.execute(
             "INSERT INTO audit_log(action,target,status,detail,created_at) VALUES(?,?,?,?,?)",
@@ -13,7 +14,7 @@ def audit(action: str, target: str | None, status: str, detail: str = "") -> Non
 def create_event(text: str, source: str = "manual", role_override: str | None = None, **extra) -> int:
     c = classify(text)
     role = role_override or c.role
-    now = datetime.now().isoformat(timespec="seconds")
+    now = now_kst().isoformat(timespec="seconds")
     extra_fields = {
         "project": None, "goal": None, "financial_impact": None,
         "family_impact": None, "blocked_by": None, "defer_reason": None,
@@ -59,7 +60,7 @@ def update_event(event_id: int, **fields) -> dict:
         allowed = {"inbox","planned","doing","done","deferred","dropped"}
         if updates["status"] not in allowed:
             raise ValueError("invalid status")
-    now = datetime.now().isoformat(timespec="seconds")
+    now = now_kst().isoformat(timespec="seconds")
     set_clause = ", ".join(f"{k}=?" for k in updates) + ", updated_at=?"
     params = list(updates.values()) + [now, event_id]
     with connect() as conn:
@@ -70,7 +71,7 @@ def update_event(event_id: int, **fields) -> dict:
 def defer_event(event_id: int, reason: str, next_review_at: str | None = None) -> dict:
     if not get_event(event_id):
         raise ValueError("event not found")
-    now = datetime.now().isoformat(timespec="seconds")
+    now = now_kst().isoformat(timespec="seconds")
     with connect() as conn:
         conn.execute(
             "UPDATE events SET status='deferred', defer_reason=?, next_review_at=?, updated_at=? WHERE id=?",
@@ -94,7 +95,7 @@ def update_status(event_id: int, status: str) -> None:
     allowed = {"inbox","planned","doing","done","deferred","dropped"}
     if status not in allowed:
         raise ValueError("invalid status")
-    now = datetime.now().isoformat(timespec="seconds")
+    now = now_kst().isoformat(timespec="seconds")
     with connect() as conn:
         conn.execute("UPDATE events SET status=?, updated_at=? WHERE id=?", (status, now, event_id))
     audit("update_status", str(event_id), "success", status)
@@ -102,7 +103,7 @@ def update_status(event_id: int, status: str) -> None:
 def attention_items() -> dict:
     """Events needing follow-up: overdue, deferred, or blocked — per
     MVP_SPEC.md's 'show blocked/overdue/deferred items' requirement."""
-    today = date.today().isoformat()
+    today = today_kst().isoformat()
     with connect() as conn:
         overdue = conn.execute(
             """SELECT * FROM events WHERE status NOT IN ('done','dropped')
@@ -123,7 +124,7 @@ def attention_items() -> dict:
     }
 
 def today_plan():
-    today = date.today().isoformat()
+    today = today_kst().isoformat()
     with connect() as conn:
         rows = conn.execute(
             """SELECT * FROM events
@@ -135,7 +136,7 @@ def today_plan():
     return [dict(r) for r in rows]
 
 def build_review() -> dict:
-    today = date.today().isoformat()
+    today = today_kst().isoformat()
     with connect() as conn:
         done = conn.execute(
             "SELECT * FROM events WHERE status='done' AND substr(updated_at,1,10)=?", (today,)
@@ -151,7 +152,7 @@ def build_review() -> dict:
         "\n\n## 다음 검토 대상\n" +
         ("\n".join(f"- [{r['status']}] {r['text']}" for r in open_rows[:10]) or "- 없음")
     )
-    now = datetime.now().isoformat(timespec="seconds")
+    now = now_kst().isoformat(timespec="seconds")
     with connect() as conn:
         conn.execute(
             """INSERT INTO reviews(review_date,summary,created_at) VALUES(?,?,?)
@@ -177,8 +178,8 @@ def review_for_date(review_date: str):
 def save_reflection(text: str, review_date: str | None = None) -> dict:
     """Attach a one-line daily reflection to a review, as part of the review
     flow rather than a standalone always-on widget."""
-    review_date = review_date or date.today().isoformat()
-    now = datetime.now().isoformat(timespec="seconds")
+    review_date = review_date or today_kst().isoformat()
+    now = now_kst().isoformat(timespec="seconds")
     with connect() as conn:
         existing = conn.execute("SELECT id FROM reviews WHERE review_date=?", (review_date,)).fetchone()
         if not existing:
@@ -244,7 +245,7 @@ def life_balance() -> dict:
 def decision_support() -> list[dict]:
     """Rule-based decision-support signals derived from real event data (no
     LLM call — deterministic heuristics over what's actually in the system)."""
-    today = date.today().isoformat()
+    today = today_kst().isoformat()
     insights: list[dict] = []
     with connect() as conn:
         overdue = conn.execute(
@@ -277,7 +278,7 @@ def decision_support() -> list[dict]:
 def operations_summary() -> dict:
     """The one-line operational status shown at the top of the app instead
     of a generic greeting."""
-    today = date.today().isoformat()
+    today = today_kst().isoformat()
     focus_count = len(today_plan())
     with connect() as conn:
         waiting = conn.execute(
@@ -333,6 +334,51 @@ def _ctx_clause(ctx: str):
         return "role=?", ctx.split(":", 1)[1]
     return None, None
 
+def add_attachment(event_id: int, original_name: str, stored_name: str, mime_type: str | None, size_bytes: int) -> dict:
+    if not get_event(event_id):
+        raise ValueError("event not found")
+    now = now_kst().isoformat(timespec="seconds")
+    with connect() as conn:
+        cur = conn.execute(
+            """INSERT INTO attachments(event_id, original_name, stored_name, mime_type, size_bytes, created_at)
+            VALUES(?,?,?,?,?,?)""",
+            (event_id, original_name, stored_name, mime_type, size_bytes, now),
+        )
+        attachment_id = cur.lastrowid
+    audit("add_attachment", str(event_id), "success", original_name)
+    return get_attachment(attachment_id)
+
+def get_attachment(attachment_id: int) -> dict | None:
+    with connect() as conn:
+        row = conn.execute("SELECT * FROM attachments WHERE id=?", (attachment_id,)).fetchone()
+    return dict(row) if row else None
+
+def list_attachments(event_id: int) -> list[dict]:
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT * FROM attachments WHERE event_id=? ORDER BY created_at ASC", (event_id,)
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+def _attach_files(events: list[dict]) -> list[dict]:
+    """Populate each event dict with its `attachments` list in one query,
+    so listing events never triggers N+1 lookups (personal-scale data, but
+    still worth avoiding as attachments are shown in every list view)."""
+    if not events:
+        return events
+    ids = [e["id"] for e in events]
+    placeholders = ",".join("?" * len(ids))
+    with connect() as conn:
+        rows = conn.execute(
+            f"SELECT * FROM attachments WHERE event_id IN ({placeholders}) ORDER BY created_at ASC", ids
+        ).fetchall()
+    by_event: dict[int, list[dict]] = {}
+    for r in rows:
+        by_event.setdefault(r["event_id"], []).append(dict(r))
+    for e in events:
+        e["attachments"] = by_event.get(e["id"], [])
+    return events
+
 def context_events(ctx: str, limit: int = 500):
     where, param = _ctx_clause(ctx)
     q = "SELECT * FROM events"
@@ -343,7 +389,8 @@ def context_events(ctx: str, limit: int = 500):
     q += " ORDER BY created_at DESC LIMIT ?"
     params.append(limit)
     with connect() as conn:
-        return [dict(r) for r in conn.execute(q, params).fetchall()]
+        events = [dict(r) for r in conn.execute(q, params).fetchall()]
+    return _attach_files(events)
 
 def context_workspace(ctx: str, selected_date: str | None = None) -> dict:
     """Everything the center 'workspace' panel needs for a given (domain,
@@ -357,7 +404,7 @@ def context_workspace(ctx: str, selected_date: str | None = None) -> dict:
     (Waiting/Overdue/Blocked/Deferred) only make sense for 'now', so they're
     populated for today and left empty for a historical date — the
     historical view is a day's record, not a pretend live dashboard."""
-    today = date.today().isoformat()
+    today = today_kst().isoformat()
     selected_date = selected_date or today
     is_today = selected_date == today
     if ctx == "knowledge":

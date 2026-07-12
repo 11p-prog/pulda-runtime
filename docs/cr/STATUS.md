@@ -42,6 +42,7 @@ incomplete` until closed.
 | CR-0009 | Activity-Log Time Axis for the Event List | High | Implemented (covered by test) | Replit | User | 2026-07-13 | 2026-07-13 |
 | CR-0010 | Remove Stray "health" Link (Scoped Interim Fix) | Medium | Implemented | Replit | User | 2026-07-13 | 2026-07-13 |
 | CR-0011 | User-Managed Workspace Tabs (Replit-Style Add/Remove) | High | Implemented (covered by test) | Replit | User | 2026-07-13 | 2026-07-13 |
+| CR-0012 | Imported: Home and Event Feed Redesign (pulda-ux-handoff-v0.1) | High | Blocked — conflicts with CR-0011, needs User decision | ChatGPT | User | 2026-07-13 | 2026-07-13 |
 
 ## RFCs open for discussion
 - RFC-0001 — AI Memory Structure

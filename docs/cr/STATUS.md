@@ -40,6 +40,7 @@ incomplete` until closed.
 | CR-0007 | Generic File Attachments (Import Phase 1) | Medium | Implemented (upload validation + transaction rollback now covered by test) | Replit | User | 2026-07-13 | 2026-07-13 |
 | CR-0008 | External Audit Fixes + Verification Standard | High | Implemented | Replit | User | 2026-07-13 | 2026-07-13 |
 | CR-0009 | Activity-Log Time Axis for the Event List | High | Implemented (covered by test) | Replit | User | 2026-07-13 | 2026-07-13 |
+| CR-0010 | Remove Stray "health" Link (Scoped Interim Fix) | Medium | Implemented | Replit | User | 2026-07-13 | 2026-07-13 |
 
 ## RFCs open for discussion
 - RFC-0001 — AI Memory Structure

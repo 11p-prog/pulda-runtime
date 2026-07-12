@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+- 2026-07-13 — Event delete (user request): "삭제" control added to every
+  event list (오늘 실행 후보 / 최근 Event / 전체 Event), with a click-to-confirm
+  panel offering two modes:
+  - 숨김 삭제 (soft, default) — hides the event from all lists but keeps the
+    row and logs a `deleted` transition into the same status-history feed,
+    so it's still auditable later.
+  - 완전 삭제 (hard) — purges the event, its attachments, and its history
+    rows outright; reserved for genuine duplicate captures (e.g. a
+    double-tapped submit) where no record is worth keeping.
+  - `events.deleted_at` column added (migration-on-startup); every event
+    query that feeds a visible list now filters `deleted_at IS NULL`.
+- 2026-07-12/13 — Status-change history in the Event feed (user request):
+  changing an event's status from any list (not just the 오늘 실행 후보
+  card) now records a `from → to` entry in a new `event_history` table,
+  merged into both "최근 Event" and "전체 Event" as a lightweight read-only
+  row so the transition stays visible even after the event leaves the
+  candidate list. Status-change forms carry a hidden `redirect_date` so
+  changing status from a historical/future day returns to that day instead
+  of always bouncing to today.
+- 2026-07-12 — Fixed a calendar-header bug: future dates were mislabeled
+  "과거 기록" (past record) instead of showing no suffix (today) or "다가올
+  계획" (upcoming plan).
+
 - Extended CR-0000 into a full CR/ADR/RFC document system per user
   direction: Git (`docs/cr/`, `docs/adr/`, `docs/rfc/`) is the source of
   truth for all three document types (one cumulative file per item; never

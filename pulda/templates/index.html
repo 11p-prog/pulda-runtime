@@ -321,11 +321,16 @@
         <div class="overflow-x-auto rounded-xl border border-outline-variant/10">
           <table class="w-full text-[13px]">
             <thead class="bg-surface-container-low text-on-surface-variant/70">
-              <tr><th class="text-left p-3 font-medium">내용</th><th class="text-left p-3 font-medium">역할/영역</th><th class="text-left p-3 font-medium">중요/긴급</th><th class="text-left p-3 font-medium">상태</th><th class="text-left p-3 font-medium">첨부</th></tr>
+              <tr><th class="text-left p-3 font-medium w-20">수집시간</th><th class="text-left p-3 font-medium">내용</th><th class="text-left p-3 font-medium">역할/영역</th><th class="text-left p-3 font-medium">중요/긴급</th><th class="text-left p-3 font-medium">상태</th><th class="text-left p-3 font-medium">첨부</th></tr>
             </thead>
             <tbody>
-              {% for e in events %}
+              {% for grp in events_grouped %}
+              <tr class="border-t border-outline-variant/10 bg-surface-container-low/60">
+                <td colspan="6" class="px-3 py-1.5 text-[11px] font-semibold text-on-surface-variant/70 tracking-wide">{{ grp.label }}</td>
+              </tr>
+              {% for e in grp.events %}
               <tr class="border-t border-outline-variant/10">
+                <td class="p-3 text-on-surface-variant/60 tabular-nums whitespace-nowrap">{{ e.created_at[11:16] if e.created_at|length > 11 else e.created_at }}</td>
                 <td class="p-3">{{ e.text }}</td>
                 <td class="p-3 text-on-surface-variant/70">{{ e.role }} / {{ e.area }}</td>
                 <td class="p-3 text-on-surface-variant/70">{{ e.importance }}/{{ e.urgency }}</td>
@@ -338,6 +343,9 @@
                   {% endfor %}
                 </td>
               </tr>
+              {% endfor %}
+              {% else %}
+              <tr><td colspan="6" class="p-3 text-on-surface-variant/40">아직 기록된 Event가 없습니다.</td></tr>
               {% endfor %}
             </tbody>
           </table>

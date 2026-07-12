@@ -1,5 +1,5 @@
 from datetime import datetime, date
-from .timeutil import now_kst, today_kst
+from .timeutil import now_kst, today_kst, date_label
 from .db import connect
 from .classifier import classify
 
@@ -463,6 +463,7 @@ def context_workspace(ctx: str, selected_date: str | None = None) -> dict:
 
     return {
         "events": events,
+        "events_grouped": group_events_by_date(events),
         "plan": plan,
         "recent": recent,
         "attention": {"overdue": overdue, "deferred": deferred, "blocked": blocked},
@@ -475,6 +476,26 @@ def context_workspace(ctx: str, selected_date: str | None = None) -> dict:
         "is_today": is_today,
         "selected_date": selected_date,
     }
+
+def group_events_by_date(events: list[dict]) -> list[dict]:
+    """Bucket an events list (already sorted, any order) into day groups for
+    the log-style '전체 Event' view (CR-0009): a flat table with no time
+    axis reads as "notes piling up"; grouping by day with a relative label
+    (오늘/어제/N일 전) restores the sense that activity is being recorded.
+    Groups preserve the input's per-event order and are emitted in the
+    order their first event appears, so a DESC-sorted input yields
+    newest-day-first groups."""
+    today = today_kst()
+    groups: dict[str, dict] = {}
+    order: list[str] = []
+    for e in events:
+        d = e["created_at"][:10]
+        if d not in groups:
+            groups[d] = {"date": d, "label": date_label(d, today), "events": []}
+            order.append(d)
+        groups[d]["events"].append(e)
+    return [groups[d] for d in order]
+
 
 def calendar_activity(year: int, month: int) -> dict[str, int]:
     """Per-day capture counts for the given month — feeds the mini

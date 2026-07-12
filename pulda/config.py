@@ -10,6 +10,8 @@ def _bool(name: str, default: bool = False) -> bool:
 @dataclass(frozen=True)
 class Settings:
     db_path: str = os.getenv("PULDA_DB_PATH", "data/pulda.db")
+    attachment_dir: str = os.getenv("PULDA_ATTACHMENT_DIR", "data/attachments")
+    max_attachment_mb: int = int(os.getenv("PULDA_MAX_ATTACHMENT_MB", "20"))
     timezone: str = os.getenv("PULDA_TIMEZONE", "Asia/Seoul")
     host: str = os.getenv("PULDA_HOST", "0.0.0.0")
     port: int = int(os.getenv("PULDA_PORT", "8000"))

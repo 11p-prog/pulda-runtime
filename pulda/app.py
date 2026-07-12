@@ -14,7 +14,7 @@ from .service import (
     get_event, update_event, defer_event, attention_items, delete_event,
     life_balance, decision_support, operations_summary, save_reflection,
     CONTEXT_TABS, distinct_projects, context_workspace, calendar_activity, review_for_date,
-    add_attachment, get_attachment,
+    add_attachment, get_attachment, group_events_by_date,
 )
 from .connectors import sync_notion, sync_github, check_notion, check_github
 from .scheduler import start_scheduler
@@ -116,6 +116,7 @@ def index(request: Request, ctx: str = "today", cal_date: str | None = None):
         "is_today": workspace["is_today"],
         "pinned": pinned,
         "events": workspace["events"] if ctx != "knowledge" else list_events(limit=50),
+        "events_grouped": workspace["events_grouped"] if ctx != "knowledge" else group_events_by_date(list_events(limit=50)),
         "plan": workspace["plan"],
         "recent_events": workspace["recent"],
         "review": review,

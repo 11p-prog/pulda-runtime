@@ -39,6 +39,7 @@ incomplete` until closed.
 | CR-0006 | Privacy-first Architecture | High | Implemented (policy/doc only — no runtime enforcement; disclosed in CR text) | Replit | User | 2026-07-12 | 2026-07-12 |
 | CR-0007 | Generic File Attachments (Import Phase 1) | Medium | Implemented (upload validation + transaction rollback now covered by test) | Replit | User | 2026-07-13 | 2026-07-13 |
 | CR-0008 | External Audit Fixes + Verification Standard | High | Implemented | Replit | User | 2026-07-13 | 2026-07-13 |
+| CR-0009 | Activity-Log Time Axis for the Event List | High | Implemented (covered by test) | Replit | User | 2026-07-13 | 2026-07-13 |
 
 ## RFCs open for discussion
 - RFC-0001 — AI Memory Structure

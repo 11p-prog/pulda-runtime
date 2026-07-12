@@ -27,6 +27,7 @@ user's verification can move it to User Verified → Closed.
 | CR-0004 | Automatic Today | High | Implemented | Replit | User | 2026-07-12 | 2026-07-12 |
 | CR-0005 | Historical Import Framework | Medium | Deferred | — | — | 2026-07-12 | 2026-07-12 |
 | CR-0006 | Privacy-first Architecture | High | Implemented | Replit | User | 2026-07-12 | 2026-07-12 |
+| CR-0007 | Generic File Attachments (Import Phase 1) | Medium | Implemented | Replit | User | 2026-07-13 | 2026-07-13 |
 
 ## RFCs open for discussion
 - RFC-0001 — AI Memory Structure

@@ -108,6 +108,8 @@ def index(request: Request, cal_date: str | None = None):
         "calendar_label": f"{year}.{month:02d}",
         "selected_date": selected_date,
         "is_today": workspace["is_today"],
+        "is_past": workspace["is_past"],
+        "is_future": workspace["is_future"],
         "pinned": pinned,
         "events": workspace["events"],
         "events_grouped": workspace["events_grouped"],

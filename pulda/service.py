@@ -410,8 +410,18 @@ def context_workspace(ctx: str, selected_date: str | None = None) -> dict:
     today = today_kst().isoformat()
     selected_date = selected_date or today
     is_today = selected_date == today
+    # A date after today is a future plan, not a record — "과거 기록" only
+    # applies to dates strictly before today (user-reported bug: future
+    # dates were mislabeled as past records).
+    is_future = selected_date > today
+    is_past = not is_today and not is_future
     all_events = context_events(ctx)
-    day_events = [e for e in all_events if e["created_at"][:10] == selected_date]
+    if is_future:
+        # Nothing has been created yet for a future date — its "day" is
+        # defined by what's *due* then, not by created_at.
+        day_events = [e for e in all_events if e["due_date"] == selected_date]
+    else:
+        day_events = [e for e in all_events if e["created_at"][:10] == selected_date]
     open_events = [e for e in all_events if e["status"] not in ("done", "dropped")]
     completed = [e for e in all_events if e["status"] == "done" and e["updated_at"][:10] == selected_date]
 
@@ -440,8 +450,9 @@ def context_workspace(ctx: str, selected_date: str | None = None) -> dict:
         waiting = [e for e in all_events if e["status"] == "inbox"]
         events = all_events
     else:
-        # Historical day: no live-state sections — show what actually
-        # happened that day instead of pretending it's a live dashboard.
+        # Historical or future day: no live-state sections — a past date
+        # shows what actually happened, a future date shows what's planned
+        # (due) for it, never a pretend live dashboard.
         plan = sorted(day_events, key=lambda e: (-e["importance"], -e["urgency"], e["created_at"]))
         overdue, deferred, blocked = [], [], []
         waiting = [e for e in day_events if e["status"] == "inbox"]
@@ -460,6 +471,8 @@ def context_workspace(ctx: str, selected_date: str | None = None) -> dict:
             "completed_today": len(completed),
         },
         "is_today": is_today,
+        "is_past": is_past,
+        "is_future": is_future,
         "selected_date": selected_date,
     }
 

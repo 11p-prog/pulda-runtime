@@ -143,7 +143,7 @@
     <header id="pulda-header" data-server-today="{{ today }}" data-selected-date="{{ selected_date }}" data-pinned="{{ 'true' if pinned else 'false' }}"
       class="flex justify-between items-center w-full px-10 py-6 sticky top-0 z-40 bg-surface-bright/80 glass-blur">
       <div class="flex items-center gap-3">
-        <span class="text-[11px] font-semibold {{ 'text-on-surface-variant' if is_today else 'text-primary' }} tracking-widest uppercase">{{ selected_date }}{% if not is_today %} · 과거 기록{% endif %}</span>
+        <span class="text-[11px] font-semibold {{ 'text-on-surface-variant' if is_today else 'text-primary' }} tracking-widest uppercase">{{ selected_date }}{% if is_past %} · 과거 기록{% elif is_future %} · 다가올 계획{% endif %}</span>
         {% if not is_today %}
         <a href="/" class="text-[11px] font-medium text-primary bg-primary/10 hover:bg-primary/20 rounded-full px-3 py-1">Today로 돌아가기</a>
         {% endif %}
@@ -219,7 +219,7 @@
               </div>
             </div>
             {% else %}
-            <p class="text-[15px] text-on-surface-variant/50 py-4">{{ '오늘 특별히 집중할 후보가 없습니다.' if is_today else '이 날짜에 기록된 주요 항목이 없습니다.' }}</p>
+            <p class="text-[15px] text-on-surface-variant/50 py-4">{{ '오늘 특별히 집중할 후보가 없습니다.' if is_today else ('이 날짜에 예정된 주요 항목이 없습니다.' if is_future else '이 날짜에 기록된 주요 항목이 없습니다.') }}</p>
             {% endfor %}
           </div>
         </div>
@@ -269,7 +269,7 @@
            Scoped to the selected date (Review v3 #1/#4): this is that day's
            log, not a rolling "last 15 regardless of date" list. -->
       <div class="border-t border-outline-variant/20 pt-6">
-        <h3 class="text-[13px] font-medium text-on-surface-variant mb-4">{{ '최근 Event' if is_today else selected_date + ' 기록' }}</h3>
+        <h3 class="text-[13px] font-medium text-on-surface-variant mb-4">{{ '최근 Event' if is_today else selected_date + (' 예정' if is_future else ' 기록') }}</h3>
         <div class="space-y-1">
           {% for e in recent_events %}
           <details class="group rounded-xl hover:bg-surface-container-low px-3">

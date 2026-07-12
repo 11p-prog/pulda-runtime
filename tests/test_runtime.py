@@ -85,6 +85,29 @@ def test_context_workspace_scopes_to_selected_historical_date():
     assert workspace["recent"] == []  # nothing was created on other_day
     assert workspace["events"] == []
 
+def test_context_workspace_labels_future_date_as_upcoming_not_past():
+    # User-reported bug: picking a date after today showed "과거 기록"
+    # (past record). Only a date strictly before today is a past record;
+    # a date after today is an upcoming plan.
+    today = today_kst().isoformat()
+    future_day = (today_kst() + timedelta(days=3)).isoformat()
+    past_day = (today_kst() - timedelta(days=3)).isoformat()
+
+    today_ws = context_workspace("today", selected_date=today)
+    assert today_ws["is_today"] is True
+    assert today_ws["is_past"] is False
+    assert today_ws["is_future"] is False
+
+    future_ws = context_workspace("today", selected_date=future_day)
+    assert future_ws["is_today"] is False
+    assert future_ws["is_past"] is False
+    assert future_ws["is_future"] is True
+
+    past_ws = context_workspace("today", selected_date=past_day)
+    assert past_ws["is_today"] is False
+    assert past_ws["is_past"] is True
+    assert past_ws["is_future"] is False
+
 def test_capture_rejects_disallowed_file_type_and_rolls_back_event():
     # CR-0007 audit findings #3/#4: server must validate file type itself
     # (UI `accept` is not a security boundary), and a rejected upload must

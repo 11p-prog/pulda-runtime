@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Pulda OS</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+<style>
+  .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24; }
+  .glass-blur { backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+  @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }
+  .animate-float { animation: float 6s ease-in-out infinite; }
+  .balance-bar { transition: width 0.6s ease; }
+</style>
+<script id="tailwind-config">
+  tailwind.config = {
+    theme: { extend: {
+      colors: {
+        "surface-bright": "#fcf8fb", "surface": "#fcf8fb", "background": "#fcf8fb",
+        "surface-container-lowest": "#ffffff", "surface-container-low": "#f6f3f5",
+        "surface-container": "#f0edef", "surface-container-high": "#eae7ea",
+        "surface-container-highest": "#e4e2e4",
+        "on-surface": "#1b1b1d", "on-surface-variant": "#414755", "on-background": "#1b1b1d",
+        "outline": "#717786", "outline-variant": "#c1c6d7",
+        "primary": "#0058bc", "on-primary": "#ffffff", "primary-container": "#0070eb",
+        "secondary": "#5d5e63", "on-secondary": "#ffffff", "secondary-container": "#dfdfe4",
+        "on-secondary-container": "#616267",
+        "tertiary": "#9e3d00", "on-tertiary": "#ffffff", "tertiary-fixed": "#ffdbcc", "on-tertiary-fixed": "#351000",
+        "error": "#ba1a1a", "on-error": "#ffffff", "error-container": "#ffdad6", "on-error-container": "#93000a",
+        "success": "#1b7a3d", "success-container": "#d7f2e0",
+        "warning": "#9e6b00", "warning-container": "#fff0c2",
+      },
+      borderRadius: { DEFAULT: "0.25rem", lg: "0.5rem", xl: "0.75rem", full: "9999px" },
+      fontFamily: { sans: ["Inter"] },
+    } },
+  }
+</script>
+</head>
+<body class="bg-surface-bright text-on-surface font-sans overflow-x-hidden">
+<div class="flex min-h-screen w-full relative">
+
+  <!-- Side Nav -->
+  <nav class="h-screen w-64 fixed left-0 top-0 flex flex-col py-8 px-4 bg-surface z-50 border-r border-outline-variant/10">
+    <div class="flex items-center gap-3 px-4 mb-10">
+      <div class="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+        <span class="material-symbols-outlined text-white text-lg">grain</span>
+      </div>
+      <div>
+        <h1 class="text-lg font-semibold text-primary leading-tight">Pulda OS</h1>
+        <p class="text-[11px] tracking-wide text-on-surface-variant/70">삶과 일을 함께 운영합니다</p>
+      </div>
+    </div>
+
+    <!-- Mini calendar: a fast date selector + activity density indicator,
+         not the primary view (per UX v2). Picking a date is a real context
+         switch — it activates that day's workspace (Review v3 #1/#6), it
+         doesn't just highlight a cell. -->
+    <div class="px-4 mb-6">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-[11px] font-semibold text-on-surface-variant tracking-wide">{{ calendar_label }}</span>
+        {% if not is_today %}
+        <a href="/?ctx={{ ctx }}" class="text-[10px] font-semibold text-primary px-2 py-0.5 rounded-full bg-primary/10 hover:bg-primary/20">오늘</a>
+        {% endif %}
+      </div>
+      <div class="grid grid-cols-7 gap-1">
+        {% for w in calendar_weeks %}
+          {% for d in w %}
+          {% if d %}
+          <a href="/?ctx={{ ctx }}&cal_date={{ d.iso }}"
+            class="w-6 h-6 flex items-center justify-center rounded-[6px] text-[10px]
+              {% if d.selected %}bg-primary text-on-primary font-semibold
+              {% elif d.count >= 3 %}bg-primary/70 text-on-primary
+              {% elif d.count >= 1 %}bg-primary/25 text-primary
+              {% else %}text-on-surface-variant/50 hover:bg-surface-container-low{% endif %}"
+            title="{{ d.iso }} · {{ d.count }}건">{{ d.day }}</a>
+          {% else %}
+          <span class="w-6 h-6"></span>
+          {% endif %}
+          {% endfor %}
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Sidebar is navigation only — Event capture lives in the persistent
+         bottom capture bar, not here. -->
+    <div class="space-y-1">
+      <a class="flex items-center gap-3 px-4 py-3 {{ 'bg-secondary-container text-on-secondary-container' if ctx == 'today' else 'text-on-surface-variant hover:bg-surface-container-low transition-colors' }} rounded-xl text-[13px] font-medium" href="/?ctx=today">
+        <span class="material-symbols-outlined">target</span> 오늘
+      </a>
+      <span class="flex items-center gap-3 px-4 py-3 text-on-surface-variant/40 rounded-xl text-[13px] font-medium cursor-not-allowed" title="다음 단계에서 제공됩니다">
+        <span class="material-symbols-outlined">folder_open</span> 프로젝트 <span class="text-[10px]">(준비중)</span>
+      </span>
+      <a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-low transition-colors rounded-xl text-[13px] font-medium" href="#waiting-section">
+        <span class="material-symbols-outlined">hourglass_empty</span> 대기
+      </a>
+      <span class="flex items-center gap-3 px-4 py-3 text-on-surface-variant/40 rounded-xl text-[13px] font-medium cursor-not-allowed" title="다음 단계에서 제공됩니다">
+        <span class="material-symbols-outlined">school</span> 지식 <span class="text-[10px]">(준비중)</span>
+      </span>
+      <a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-low transition-colors rounded-xl text-[13px] font-medium" href="#review-section">
+        <span class="material-symbols-outlined">fact_check</span> 리뷰
+      </a>
+      <span class="flex items-center gap-3 px-4 py-3 text-on-surface-variant/40 rounded-xl text-[13px] font-medium cursor-not-allowed" title="다음 단계에서 제공됩니다">
+        <span class="material-symbols-outlined">inventory_2</span> 보관함 <span class="text-[10px]">(준비중)</span>
+      </span>
+      <span class="flex items-center gap-3 px-4 py-3 text-on-surface-variant/40 rounded-xl text-[13px] font-medium cursor-not-allowed" title="다음 단계에서 제공됩니다">
+        <span class="material-symbols-outlined">settings</span> 설정 <span class="text-[10px]">(준비중)</span>
+      </span>
+    </div>
+
+    <div class="mt-auto px-4 flex items-center gap-3 py-4 border-t border-outline-variant/10">
+      <span class="w-2.5 h-2.5 rounded-full {{ 'bg-success' if notion_status.ok else 'bg-error' }}"></span>
+      <div>
+        <p class="text-[12px] font-semibold">Notion 연동</p>
+        {% if notion_status.ok %}
+        <p class="text-[11px] text-on-surface-variant">{{ notion_status.identity.workspace_name }} 연결됨</p>
+        {% else %}
+        <p class="text-[11px] text-error">연결 확인 필요</p>
+        {% endif %}
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main -->
+  <main class="ml-64 flex-1 flex flex-col relative mr-80">
+    <header id="pulda-header" data-server-today="{{ today }}" data-selected-date="{{ selected_date }}" data-pinned="{{ 'true' if pinned else 'false' }}"
+      class="flex justify-between items-center w-full px-10 py-6 sticky top-0 z-40 bg-surface-bright/80 glass-blur">
+      <div class="flex items-center gap-3">
+        <span class="text-[11px] font-semibold {{ 'text-on-surface-variant' if is_today else 'text-primary' }} tracking-widest uppercase">{{ selected_date }}{% if not is_today %} · 과거 기록{% endif %}</span>
+        {% if not is_today %}
+        <a href="/?ctx={{ ctx }}" class="text-[11px] font-medium text-primary bg-primary/10 hover:bg-primary/20 rounded-full px-3 py-1">Today로 돌아가기</a>
+        {% endif %}
+      </div>
+      <div class="flex items-center gap-4">
+        <a href="/api/health" class="text-[11px] text-on-surface-variant/60 hover:text-on-surface-variant">health</a>
+      </div>
+    </header>
+
+    <!-- Workspace tabs: VS Code/Replit-style contexts. The active tab owns
+         the user's attention — this is the workspace, not a dashboard. -->
+    <div class="flex gap-1 px-10 pt-2 border-b border-outline-variant/10 overflow-x-auto sticky top-[64px] z-30 bg-surface-bright/90 glass-blur">
+      {% for t in tabs %}
+      <a href="/?ctx={{ t.ctx }}"
+        class="flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium whitespace-nowrap rounded-t-lg border-b-2 transition-colors
+          {% if t.ctx == ctx %}border-primary text-primary bg-surface-container-lowest{% else %}border-transparent text-on-surface-variant/60 hover:text-on-surface-variant hover:bg-surface-container-low{% endif %}">
+        <span class="material-symbols-outlined text-[16px]">{{ t.icon }}</span> {{ t.label }}
+      </a>
+      {% endfor %}
+    </div>
+
+    <div class="max-w-4xl mx-auto w-full px-10 py-10 pb-36 flex flex-col gap-14">
+
+      {% if ctx == "knowledge" %}
+      <section class="py-20 text-center">
+        <span class="material-symbols-outlined text-4xl text-on-surface-variant/30 mb-3 block">school</span>
+        <p class="text-[15px] text-on-surface-variant/50">지식 워크스페이스는 아직 준비 중입니다. 아래 캡처 바로 기록은 계속 남을 수 있습니다.</p>
+      </section>
+      {% else %}
+
+      <!-- Operational status hero (dashboard tiles, not a greeting/checklist) -->
+      <section>
+        <h2 class="text-[13px] tracking-widest uppercase text-primary font-semibold mb-4">
+          {% for t in tabs %}{% if t.ctx == ctx %}{{ t.label if ctx != "today" else "오늘의 운영" }}{% endif %}{% endfor %}
+          {% if not is_today %} · {{ selected_date }}{% endif %}
+        </h2>
+        <div class="grid grid-cols-4 gap-3 mb-3">
+          <div class="bg-surface-container-lowest rounded-2xl p-4 border border-outline-variant/5">
+            <p class="text-[11px] text-on-surface-variant/60 mb-1">{{ '집중' if is_today else '주요 항목' }}</p>
+            <p class="text-[24px] font-semibold text-primary">{{ ops.focus_count }}</p>
+          </div>
+          <div class="bg-surface-container-lowest rounded-2xl p-4 border border-outline-variant/5">
+            <p class="text-[11px] text-on-surface-variant/60 mb-1">대기</p>
+            <p class="text-[24px] font-semibold text-on-surface">{{ ops.waiting_count }}</p>
+          </div>
+          <div class="bg-surface-container-lowest rounded-2xl p-4 border border-outline-variant/5">
+            <p class="text-[11px] text-on-surface-variant/60 mb-1">차단</p>
+            <p class="text-[24px] font-semibold text-on-surface">{{ ops.blocked_count }}</p>
+          </div>
+          <div class="bg-surface-container-lowest rounded-2xl p-4 border border-outline-variant/5">
+            <p class="text-[11px] text-on-surface-variant/60 mb-1">{{ '오늘 완료' if is_today else '완료' }}</p>
+            <p class="text-[24px] font-semibold text-success">{{ ops.completed_today }}</p>
+          </div>
+        </div>
+        {% if ops.signals %}
+        <div class="flex gap-2 mb-3">
+          {% for s in ops.signals %}
+          <span class="text-[11px] font-medium px-3 py-1.5 rounded-full bg-warning-container text-warning">{{ s }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+        <p class="text-[14px] text-on-surface-variant/60">모든 입력은 Event로 시작합니다. 분류·우선순위는 시스템이 제안하고, 결정은 당신이 합니다.</p>
+      </section>
+
+      <!-- Event lifecycle card (not a checklist) -->
+      <section class="relative">
+        <div class="bg-surface-container-lowest rounded-[2rem] p-8 shadow-[0px_10px_40px_rgba(0,0,0,0.03)] border border-outline-variant/5">
+          <div class="flex justify-between items-center mb-8">
+            <h3 class="text-[11px] text-primary tracking-widest uppercase font-semibold">{{ '오늘 실행 후보' if is_today else selected_date + ' 주요 항목' }}</h3>
+            <span class="text-[11px] text-on-surface-variant/50">{{ plan|length }}건</span>
+          </div>
+          <div class="space-y-3">
+            {% for e in plan %}
+            <div class="flex items-center justify-between p-5 {{ 'bg-surface-bright border-l-4 border-primary' if loop.first else 'hover:bg-surface-container-low' }} rounded-xl transition-all">
+              <div class="flex items-center gap-5">
+                <span class="text-[10px] font-semibold px-2 py-1 rounded-full
+                  {% if e.status == 'done' %}bg-success-container text-success
+                  {% elif e.status == 'deferred' %}bg-warning-container text-warning
+                  {% elif e.status == 'doing' %}bg-primary/10 text-primary
+                  {% else %}bg-secondary-container text-on-secondary-container{% endif %}">
+                  {{ status_labels[e.status] }}
+                </span>
+                <span class="text-[17px] font-medium text-on-surface">{{ e.text }}</span>
+              </div>
+              <div class="flex items-center gap-3">
+                <span class="text-[11px] text-on-surface-variant/50">{{ e.role }} / {{ e.area }}</span>
+                <form method="post" action="/status/{{ e.id }}" class="flex items-center gap-1">
+                  <input type="hidden" name="ctx" value="{{ ctx }}"/>
+                  <select name="status" class="text-[11px] rounded-lg border-none bg-surface-container-low py-1">
+                    {% for s in status_options %}<option value="{{ s }}" {{ 'selected' if s == e.status }}>{{ status_labels[s] }}</option>{% endfor %}
+                  </select>
+                  <button class="text-[11px] text-primary font-medium px-2">변경</button>
+                </form>
+              </div>
+            </div>
+            {% else %}
+            <p class="text-[15px] text-on-surface-variant/50 py-4">{{ '오늘 특별히 집중할 후보가 없습니다.' if is_today else '이 날짜에 기록된 주요 항목이 없습니다.' }}</p>
+            {% endfor %}
+          </div>
+        </div>
+      </section>
+
+      {% if is_today %}
+      <!-- Waiting / Overdue / Deferred: live-state sections. Only shown on
+           the live Today workspace — a historical date is a record of what
+           happened, not a pretend live dashboard (Review v3 #1). -->
+      <div id="waiting-section" class="border-t border-outline-variant/20 pt-6">
+        <div class="flex items-center gap-3 mb-4">
+          <span class="material-symbols-outlined text-on-surface-variant opacity-60">hourglass_empty</span>
+          <span class="text-[13px] font-medium text-on-surface-variant">대기 (Waiting)</span>
+          <span class="w-5 h-5 flex items-center justify-center bg-surface-container text-[10px] rounded-full text-on-surface-variant">{{ attention.blocked|length }}</span>
+        </div>
+        <div class="pl-9 space-y-3">
+          {% for e in attention.blocked %}
+          <p class="text-[15px] text-on-surface-variant/70">{{ e.text }} <span class="text-on-surface-variant/40">— {{ e.blocked_by }}</span></p>
+          {% else %}
+          <p class="text-[15px] text-on-surface-variant/40">대기 중인 항목이 없습니다.</p>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="border-t border-outline-variant/20 pt-6">
+        <div class="flex items-center gap-3 mb-4">
+          <span class="material-symbols-outlined text-on-surface-variant opacity-60">event_upcoming</span>
+          <span class="text-[13px] font-medium text-on-surface-variant">기한초과 / 보류</span>
+          <span class="w-5 h-5 flex items-center justify-center bg-surface-container text-[10px] rounded-full text-on-surface-variant">{{ attention.overdue|length + attention.deferred|length }}</span>
+        </div>
+        <div class="pl-9 space-y-3">
+          {% for e in attention.overdue %}
+          <p class="text-[15px] text-error/80">기한초과: {{ e.text }} ({{ e.due_date }})</p>
+          {% endfor %}
+          {% for e in attention.deferred %}
+          <p class="text-[15px] text-on-surface-variant/70">보류: {{ e.text }}{% if e.defer_reason %} — {{ e.defer_reason }}{% endif %}{% if e.next_review_at %} (재검토 {{ e.next_review_at }}){% endif %}</p>
+          {% endfor %}
+          {% if not attention.overdue and not attention.deferred %}
+          <p class="text-[15px] text-on-surface-variant/40">기한초과·보류 항목이 없습니다.</p>
+          {% endif %}
+        </div>
+      </div>
+      {% endif %}
+
+      <!-- Recent Events: mandatory (per UX v2) so captures are verifiable,
+           not just prioritized — chronological, not importance-sorted.
+           Scoped to the selected date (Review v3 #1/#4): this is that day's
+           log, not a rolling "last 15 regardless of date" list. -->
+      <div class="border-t border-outline-variant/20 pt-6">
+        <h3 class="text-[13px] font-medium text-on-surface-variant mb-4">{{ '최근 Event' if is_today else selected_date + ' 기록' }}</h3>
+        <div class="space-y-1">
+          {% for e in recent_events %}
+          <details class="group rounded-xl hover:bg-surface-container-low px-3">
+            <summary class="list-none cursor-pointer flex items-center justify-between gap-3 py-2.5">
+              <div class="flex items-center gap-3 min-w-0">
+                <span class="text-[10px] font-semibold px-2 py-1 rounded-full shrink-0
+                  {% if e.status == 'done' %}bg-success-container text-success
+                  {% elif e.status == 'deferred' %}bg-warning-container text-warning
+                  {% elif e.status == 'doing' %}bg-primary/10 text-primary
+                  {% else %}bg-secondary-container text-on-secondary-container{% endif %}">
+                  {{ status_labels[e.status] }}
+                </span>
+                <span class="text-[14px] text-on-surface truncate">{{ e.text }}</span>
+              </div>
+              <span class="text-[11px] text-on-surface-variant/50 shrink-0">{{ e.created_at[11:16] if e.created_at|length > 11 else e.created_at }}</span>
+            </summary>
+            <div class="pl-3 pb-3 text-[12px] text-on-surface-variant/70 flex flex-wrap gap-x-4 gap-y-1">
+              <span>컨텍스트: {{ e.role }} / {{ e.area }}{% if e.project %} · {{ e.project }}{% endif %}</span>
+              <span>기록 시각: {{ e.created_at }}</span>
+              <span>중요/긴급: {{ e.importance }}/{{ e.urgency }}</span>
+            </div>
+          </details>
+          {% else %}
+          <p class="text-[15px] text-on-surface-variant/40 py-2">아직 기록된 Event가 없습니다.</p>
+          {% endfor %}
+        </div>
+      </div>
+
+      <!-- Full event list -->
+      <div id="review-section" class="border-t border-outline-variant/20 pt-6">
+        <h3 class="text-[13px] font-medium text-on-surface-variant mb-4">{{ '전체 Event' if is_today else selected_date + ' 전체 Event' }}</h3>
+        <div class="overflow-x-auto rounded-xl border border-outline-variant/10">
+          <table class="w-full text-[13px]">
+            <thead class="bg-surface-container-low text-on-surface-variant/70">
+              <tr><th class="text-left p-3 font-medium">내용</th><th class="text-left p-3 font-medium">역할/영역</th><th class="text-left p-3 font-medium">중요/긴급</th><th class="text-left p-3 font-medium">상태</th></tr>
+            </thead>
+            <tbody>
+              {% for e in events %}
+              <tr class="border-t border-outline-variant/10">
+                <td class="p-3">{{ e.text }}</td>
+                <td class="p-3 text-on-surface-variant/70">{{ e.role }} / {{ e.area }}</td>
+                <td class="p-3 text-on-surface-variant/70">{{ e.importance }}/{{ e.urgency }}</td>
+                <td class="p-3">{{ status_labels[e.status] }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Daily review flow (reflection lives here, not a standalone widget) -->
+      <div class="border-t border-outline-variant/20 pt-6 pb-10">
+        <h3 class="text-[13px] font-medium text-on-surface-variant mb-4">{{ '일일 리뷰' if is_today else selected_date + ' 리뷰' }}</h3>
+        {% if is_today %}
+        <div class="flex gap-3 mb-4">
+          <form method="post" action="/review"><input type="hidden" name="ctx" value="{{ ctx }}"/><button class="py-2 px-4 bg-primary text-on-primary rounded-xl text-[13px] font-medium">일일 Review 생성</button></form>
+          <form method="post" action="/sync/notion"><input type="hidden" name="ctx" value="{{ ctx }}"/><button class="py-2 px-4 bg-surface-container-low text-on-surface rounded-xl text-[13px] font-medium">Notion 동기화</button></form>
+          <form method="post" action="/sync/github"><input type="hidden" name="ctx" value="{{ ctx }}"/><button class="py-2 px-4 bg-surface-container-low text-on-surface rounded-xl text-[13px] font-medium">GitHub 동기화</button></form>
+        </div>
+        {% endif %}
+        {% if review %}
+        <div class="bg-surface-container-low rounded-2xl p-6">
+          <pre class="whitespace-pre-wrap text-[14px] text-on-surface-variant font-sans mb-4">{{ review.summary }}</pre>
+          {% if is_today %}
+          <form method="post" action="/reviews/reflection">
+            <input type="hidden" name="ctx" value="{{ ctx }}"/>
+            <label class="text-[12px] text-on-surface-variant/70 mb-2 block">오늘 하루를 한 줄로 정리하면?</label>
+            <textarea name="text" class="w-full bg-white/60 border-none rounded-xl p-3 text-[14px] focus:ring-1 focus:ring-primary resize-none min-h-[70px] mb-2" placeholder="회고를 남겨보세요">{{ review.reflection or '' }}</textarea>
+            <button class="py-2 px-4 text-[13px] font-medium text-primary hover:text-on-primary hover:bg-primary rounded-lg transition-all">회고 저장</button>
+          </form>
+          {% elif review.reflection %}
+          <p class="text-[13px] text-on-surface-variant/70">회고: {{ review.reflection }}</p>
+          {% endif %}
+        </div>
+        {% else %}
+        <p class="text-[14px] text-on-surface-variant/50">{{ '아직 생성된 리뷰가 없습니다. 위 버튼으로 생성해 보세요.' if is_today else '이 날짜에는 생성된 리뷰가 없습니다.' }}</p>
+        {% endif %}
+      </div>
+      {% endif %}
+
+    </div>
+  </main>
+
+  <!-- Right sidebar: Life Balance + Decision Support -->
+  <aside class="w-80 h-screen fixed right-0 top-0 border-l border-outline-variant/10 bg-surface flex flex-col p-8 gap-8 overflow-y-auto">
+    <div class="mt-4">
+      <h4 class="text-[11px] text-primary tracking-widest uppercase font-semibold mb-5">Life Balance</h4>
+      <div class="space-y-4">
+        {% for b in balance.buckets %}
+        <div>
+          <div class="flex justify-between text-[12px] mb-1">
+            <span class="font-medium text-on-surface">{{ b.label }}</span>
+            <span class="text-on-surface-variant/60">{{ b.count }}건 · {{ b.pct }}%</span>
+          </div>
+          <div class="w-full h-2 bg-surface-container-low rounded-full overflow-hidden">
+            <div class="balance-bar h-full bg-primary rounded-full" style="width: {{ b.pct }}%;"></div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div>
+      <h4 class="text-[11px] text-on-surface-variant tracking-widest uppercase font-semibold mb-4">Decision Support</h4>
+      <div class="space-y-3">
+        {% for i in insights %}
+        <div class="flex items-start gap-3 p-4 rounded-xl border border-outline-variant/10">
+          <span class="material-symbols-outlined text-[18px] mt-0.5
+            {% if i.level == 'warning' %}text-warning{% elif i.level == 'ok' %}text-success{% else %}text-primary{% endif %}">
+            {% if i.level == 'warning' %}priority_high{% elif i.level == 'ok' %}check_circle{% else %}insights{% endif %}
+          </span>
+          <p class="text-[13px] text-on-surface-variant leading-snug">{{ i.text }}</p>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </aside>
+
+  <div class="fixed top-[-10%] right-[-5%] w-[500px] h-[500px] bg-primary/5 rounded-full blur-[100px] pointer-events-none -z-10 animate-float"></div>
+  <div class="fixed bottom-[-5%] left-[-5%] w-[300px] h-[300px] bg-tertiary/5 rounded-full blur-[80px] pointer-events-none -z-10"></div>
+
+  <!-- Persistent capture bar: the primary interaction, always visible,
+       never hidden by scrolling. Everything starts here as an Event. -->
+  <div class="fixed bottom-6 left-64 right-80 flex flex-col items-center px-6 z-[60] pointer-events-none gap-1.5">
+    {% if ctx != "today" %}
+    <span class="pointer-events-none text-[11px] text-on-surface-variant/60 bg-surface-container-lowest/90 px-3 py-1 rounded-full border border-outline-variant/10">
+      {% for t in tabs %}{% if t.ctx == ctx %}지금 기록하면 <b class="text-primary font-medium">{{ t.label }}</b>에 저장됩니다{% endif %}{% endfor %}
+    </span>
+    {% endif %}
+    <form method="post" action="/capture" id="capture-bar-form"
+      class="pointer-events-auto w-full max-w-2xl bg-surface-container-lowest/95 glass-blur rounded-[1.5rem] shadow-[0_12px_40px_rgba(0,0,0,0.14)] border border-outline-variant/10 p-2 flex items-end gap-2">
+      <input type="hidden" name="ctx" value="{{ ctx }}"/>
+      <textarea name="text" id="capture-bar-input" required rows="1"
+        class="flex-1 resize-none bg-transparent border-none text-[15px] leading-relaxed px-3 py-2.5 focus:ring-0 focus:outline-none placeholder-on-surface-variant/40 max-h-40"
+        placeholder="지금 떠오른 것을 적어보세요."></textarea>
+      <button type="submit" aria-label="Event 기록"
+        class="shrink-0 w-10 h-10 flex items-center justify-center bg-primary text-on-primary rounded-full hover:scale-105 transition-transform active:scale-95 mb-0.5">
+        <span class="material-symbols-outlined text-xl">arrow_upward</span>
+      </button>
+    </form>
+  </div>
+</div>
+<script>
+(function () {
+  var ta = document.getElementById('capture-bar-input');
+  var form = document.getElementById('capture-bar-form');
+  if (!ta || !form) return;
+  function resize() {
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(ta.scrollHeight, 160) + 'px';
+  }
+  ta.addEventListener('input', resize);
+  ta.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (ta.value.trim()) form.submit();
+    }
+  });
+  ta.focus();
+})();
+
+// Automatic day rollover (Review v3 #2): "Today" must follow real time
+// without a manual reload. Only the *unpinned* live view (no explicit
+// cal_date chosen) auto-refreshes at midnight — a manually selected
+// historical date is preserved until the user explicitly returns to Today.
+(function () {
+  var header = document.getElementById('pulda-header');
+  if (!header) return;
+  var serverToday = header.dataset.serverToday;
+  var pinned = header.dataset.pinned === 'true';
+  if (pinned) return;
+  function localIso(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  setInterval(function () {
+    if (localIso(new Date()) !== serverToday) {
+      window.location.reload();
+    }
+  }, 30000);
+})();
+</script>
+</body>
+</html>

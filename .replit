@@ -1,0 +1,44 @@
+modules = ["python-3.11", "nodejs-24"]
+[nix]
+channel = "stable-25_05"
+packages = ["libxcrypt"]
+
+[agent]
+expertMode = true
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start application"
+
+[[workflows.workflow]]
+name = "Start application"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python -m pulda.app"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[userenv]
+
+[userenv.shared]
+AUTO_SYNC_NOTION = "true"
+NOTION_SYNC_PAGE_ID = "39be35ff-69e0-81f5-b7f1-fccd826d47a7"
+AUTO_SYNC_GITHUB = "true"
+GITHUB_BRANCH = "main"
+GITHUB_REPOSITORY = "11p-prog/pulda-runtime"

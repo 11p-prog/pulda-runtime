@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- 2026-07-14 — Phase 0 governance reset integrated without adding duplicate
+  operating/privacy documents:
+  - added root `AGENTS.md` and versioned `PROJECT_INSTRUCTIONS.md`;
+  - expanded the existing governance operating model with source authority,
+    new-chat bootstrap, conflict resolution, anti-fragmentation, and living
+    synchronization gates;
+  - added CR-0013 to Git and corrected CR-0005 from Deferred to Blocked;
+  - added explicit data export/import/restore and Builder handoff requirements;
+  - clarified that the current Runtime is executable but the living AI loop is
+    not yet implemented or user-verified.
+
 - 2026-07-13 — Event delete (user request): "삭제" control added to every
   event list (오늘 실행 후보 / 최근 Event / 전체 Event), with a click-to-confirm
   panel offering two modes:

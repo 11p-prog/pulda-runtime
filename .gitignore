@@ -3,5 +3,13 @@ __pycache__/
 .pytest_cache/
 .env
 data/*.db
+data/*.db-*
+data/*.sqlite*
 data/attachments/
+data/exports/
+data/backups/
+backups/
+exports/
+*.backup
+*.bak
 *.pyc

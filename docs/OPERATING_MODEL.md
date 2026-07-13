@@ -1,4 +1,6 @@
-# Pulda Runtime Operating Model v0.1
+# Pulda Runtime Event Processing Model v0.1
+
+This document describes Runtime behavior. Human/AI/Notion/Git/Builder governance is defined in [`governance/OPERATING-MODEL.md`](governance/OPERATING-MODEL.md).
 
 ## 입력
 

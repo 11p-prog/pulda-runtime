@@ -1,9 +1,9 @@
-# CR Status (canonical index — Git is source of truth)
+# CR Status (canonical implementation index)
 
-Notion mirrors only the columns below (CR Number, Title, Priority, Status,
-Owner, Reviewer, Created, Updated, GitHub Link, Replit Link) as an
-operations dashboard. CR content itself lives only here, in
-`docs/cr/CR-XXXX.md`, edited cumulatively.
+Notion preserves approved operating DNA, decisions, human corrections, and
+dashboard status. Git preserves versioned CR acceptance criteria and
+implementation history in `docs/cr/CR-XXXX.md`. Their links and status must be
+reconciled through `docs/governance/OPERATING-MODEL.md`.
 
 **Notion CR Dashboard**: https://app.notion.com/p/39be35ff69e081a4ac53fe8d1ee2f09e
 (database "Pulda CR Dashboard", created under the same Pulda workspace page
@@ -35,7 +35,7 @@ incomplete` until closed.
 | CR-0002 | Calendar = Date Context | High | Implemented (date-scoping now covered by test) | Replit | User | 2026-07-12 | 2026-07-13 |
 | CR-0003 | Recent Events | High | Implemented (day-scoping now covered by test) | Replit | User | 2026-07-12 | 2026-07-13 |
 | CR-0004 | Automatic Today | High | Implemented / Verification incomplete (no automated midnight-rollover test) | Replit | User | 2026-07-12 | 2026-07-13 |
-| CR-0005 | Historical Import Framework | Medium | Deferred | — | — | 2026-07-12 | 2026-07-12 |
+| CR-0005 | Historical Import Framework | Medium | Blocked — Phase 0/data prerequisites | ChatGPT | User | 2026-07-12 | 2026-07-14 |
 | CR-0006 | Privacy-first Architecture | High | Implemented (policy/doc only — no runtime enforcement; disclosed in CR text) | Replit | User | 2026-07-12 | 2026-07-12 |
 | CR-0007 | Generic File Attachments (Import Phase 1) | Medium | Implemented (upload validation + transaction rollback now covered by test) | Replit | User | 2026-07-13 | 2026-07-13 |
 | CR-0008 | External Audit Fixes + Verification Standard | High | Implemented | Replit | User | 2026-07-13 | 2026-07-13 |
@@ -43,6 +43,7 @@ incomplete` until closed.
 | CR-0010 | Remove Stray "health" Link (Scoped Interim Fix) | Medium | Implemented | Replit | User | 2026-07-13 | 2026-07-13 |
 | CR-0011 | User-Managed Workspace Tabs (Replit-Style Add/Remove) | High | Reverted — superseded by CR-0012/IA-0001 per User decision | Replit | User | 2026-07-13 | 2026-07-13 |
 | CR-0012 | Imported: Home and Event Feed Redesign (pulda-ux-handoff-v0.1) | High | Implemented (covered by test) | ChatGPT | User | 2026-07-13 | 2026-07-13 |
+| CR-0013 | Restore the First Living Loop | High | Blocked — Phase 0 governance integration | ChatGPT | User | 2026-07-13 | 2026-07-14 |
 
 ## RFCs open for discussion
 - RFC-0001 — AI Memory Structure

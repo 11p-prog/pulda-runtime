@@ -100,3 +100,32 @@ prepared for, not implemented, in this iteration:
 - Do not persist raw prompts/responses from any future cloud AI call
   alongside sensitive Event fields without the same sensitivity gate
   described above.
+
+## Data ownership and portability contract
+
+Applications and Builders are replaceable. Human Events, corrections, outcomes, provenance, and revision history are not.
+
+### Separation
+
+- Git may contain code, empty schema, migrations, tests, synthetic fixtures, and reviewed documentation.
+- Real Events, people, family, finance, parish, client data, databases, attachments, exports, backups, credentials, and secret configuration must never enter the public Git repository.
+- AI interpretations must remain distinguishable from user facts.
+- Reusable human corrections belong in approved DNA/rules with a Runtime version reference; one-time exceptions remain Event-level revisions.
+- Backups and exports belong in encrypted or otherwise private user-controlled storage.
+
+### Required round trip
+
+Before real-use expansion, Runtime must provide and verify:
+
+1. a full structured export with schema/app version and timestamps
+2. an attachment manifest and integrity checks
+3. import into an empty environment without overwriting the source
+4. record-count, stable-ID, relationship, revision, and attachment comparison
+5. documented migration and rollback
+6. a platform-independent Builder handoff
+
+SQLite remains acceptable during MVP. Replacing storage requires an approved ADR and a verified round-trip migration.
+
+No data feature is `Implemented` without reproducible export/import evidence and confirmation that a connector failure does not lose the Runtime Event.
+
+Updated: 2026-07-14

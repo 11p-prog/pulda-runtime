@@ -166,6 +166,66 @@ For material work, capture:
 
 This evidence feeds the later Tour Thai evaluation and determines whether a rule remains local, enters a project `AGENTS.md`, becomes a common Skill, or is rejected.
 
+## Concurrent circulation and operating capacity
+
+Real work does not wait for one task to finish before another begins. Events and projects move concurrently through preparation, execution, waiting, return, review, re-entry, and completion. Pulda must preserve each loop without assuming that every loop deserves continuous attention.
+
+The Evony expedition example is an operating metaphor, not a Pulda domain vocabulary: a long-running expedition consumes forces and supplies while the operator continues gathering, upgrading, defending, and making political decisions. A poorly judged expedition can destroy scarce capacity and impair every other operation.
+
+Translate the metaphor into AI/AX controls as follows:
+
+| Expedition metaphor | AI/AX operating control |
+|---|---|
+| Order an expedition | Delegate work or start execution |
+| Troops and supplies | Time, money, AI credits, people, and attention |
+| Travel time | Processing time and external-response latency |
+| Home base | Work and life the human must continue to operate directly |
+| Reconnaissance | Source audit, feasibility check, and risk assessment |
+| Return | Result delivery and handoff |
+| Retreat | Cancel, de-scope, pause, or recover |
+| Force loss | Cost loss, destructive rework, or failed recovery |
+| Expedition limit | Number of concurrent results the human can retrieve, review, and decide on |
+
+### Dispatch gate
+
+Before delegating high-cost or long-running work, confirm:
+
+- objective, authoritative source, and approved scope
+- resources at risk and maximum acceptable loss
+- expected return time or return condition
+- evidence that must return with the result
+- cancellation, de-scoping, and recovery path
+- impact on other active projects and human obligations
+- named person responsible for retrieval and review
+
+Do not start a delegation that has no defined return condition, return evidence, or next consumer.
+
+### Operational states
+
+Do not collapse all delegated work into `In Progress`. Track the smallest useful distinction:
+
+1. `Preparing` — objective, source, scope, resources, and recovery are being checked.
+2. `Executing` — a named person or tool is actively performing the work.
+3. `Waiting` — execution depends on an external response, elapsed time, build, approval, or condition.
+4. `Return Due` — a result is available or expected and has a named retrieval/review owner.
+5. `Reviewing` — returned evidence is being checked against acceptance conditions.
+6. `Re-entering` — corrected or reduced work is deliberately sent through another cycle.
+7. `Paused / Withdrawn` — capacity is protected through pause, cancellation, de-scope, or abandonment with a recorded reason.
+8. `Completed` — the result has reached its consumer and applicable evidence and follow-up are reconciled.
+
+These are operating-model candidates, not yet fixed Runtime schema values. Runtime adoption requires Tour Thai evidence and a separate approved CR.
+
+### Retrieval capacity is the concurrency limit
+
+AI production capacity is not the same as human operating capacity. If AI can generate ten results but the human can retrieve, review, and decide on only two, the effective concurrency limit is two.
+
+- Limit concurrent delegation by human retrieval and review capacity, not tool throughput.
+- While long-running work is waiting, prefer bounded, low-risk work that will not create an unreviewable return queue.
+- When return demand exceeds capacity, pause dispatch, retrieve the highest-risk or most time-sensitive result, and re-evaluate the remaining loops.
+- Measure review backlog, delayed retrieval, and abandoned outputs as rework and operating-cost evidence.
+
+This section is approved operating guidance. Promotion into a common Skill or automation remains blocked until practical evidence is collected from Tour Thai and at least one comparable project.
+
 ## Required end report
 
 Every material AI/AX task ends with:

@@ -28,6 +28,7 @@ No store replaces the others. Replit is a Builder and execution environment, not
 - Notion: operating DNA, approved meaning, decisions, corrections, and dashboard.
 
 ## Non-negotiable rules
+
 1. Existing canonical documents are checked before creating new structures.
 2. No duplicate theory, architecture, or governance document without an explicit supersession note.
 3. UI changes require UX/IA document plus CR acceptance criteria.
@@ -37,6 +38,7 @@ No store replaces the others. Replit is a Builder and execution environment, not
 7. A material conflict stops implementation until it is recorded and resolved.
 8. Tool-only state that another Builder cannot reproduce is incomplete.
 9. A disconnected document, code change, or screen is not a completed circulation.
+10. Any minimum model must include AI and DB and complete the full Event circulation at least once.
 
 ## New-chat bootstrap
 
@@ -71,6 +73,31 @@ If one is missing, do not create the artifact yet.
 Human intent or Runtime evidence → Notion DNA/decision → approved CR → Git implementation/test → Runtime execution → human correction/outcome → reusable correction → next comparable interpretation.
 
 Exporting one store into another is not synchronization. A loop is complete only when the approved meaning is implemented and exercised, human correction is preserved, the next comparable interpretation uses it, and Notion, Git, Runtime, and CR status agree again.
+
+## Minimum living loop
+
+The first implementation target is:
+
+Mobile messaging Event input → DB original preservation → AI interpretation → human correction/decision → action → result → AI follow-up proposal → next Event or interpretation → reusable correction affects the next comparable interpretation.
+
+- Telegram Bot is the first mobile input channel.
+- Text comes first; voice, image, and file input must remain extensible.
+- AI providers are replaceable adapters.
+- Initial operation uses one cloud provider; failures preserve the Event as Pending for retry.
+- A second cloud fallback and local AI are extension points, not initial runtime dependencies.
+- The Event Cycle Core DB must preserve the whole cycle and its history.
+
+## Standard Git change workflow
+
+1. The AI or Builder prepares only the approved scope in the user's local repository folder.
+2. Deliver complete replacement files when safe, preserving exact repository paths.
+3. Never put patch instructions or a partial diff at a canonical file path.
+4. When full overwrite is unsafe, provide an exact VS Code edit with target file, anchor text, and replacement region.
+5. The user reviews the diff, commits, and pushes through GitHub Desktop.
+6. The AI re-reads the remote commit and affected files before reporting reconciliation.
+7. The verified commit is linked back to the Notion CR and status.
+
+A local working-tree change or ZIP is `Prepared locally`, not `Implemented`. `Implemented` requires the remote commit and automated regression evidence.
 
 ## Status and completion gate
 

@@ -37,7 +37,7 @@ alone is insufficient. `Related Git Commit` must carry the real commit hash.
 | CR-0010 | Remove Stray "health" Link (Scoped Interim Fix) | Medium | Implemented | Replit | User | 2026-07-13 | 2026-07-13 |
 | CR-0011 | User-Managed Workspace Tabs (Replit-Style Add/Remove) | High | Reverted — superseded by CR-0012/IA-0001 per User decision | Replit | User | 2026-07-13 | 2026-07-13 |
 | CR-0012 | Imported: Home and Event Feed Redesign (pulda-ux-handoff-v0.1) | High | Implemented (covered by test) | ChatGPT | User | 2026-07-13 | 2026-07-13 |
-| CR-0013 | Restore the First Living Loop | High | Approved — repository reconciliation required before implementation | ChatGPT | User | 2026-07-13 | 2026-07-14 |
+| CR-0013 | Restore the First Living Loop | High | Approved — Phase 0 bootstrap passed; Runtime implementation not started | ChatGPT | User | 2026-07-13 | 2026-07-16 |
 
 ## RFCs open for discussion
 - RFC-0001 — AI Memory Structure
@@ -48,3 +48,4 @@ alone is insufficient. `Related Git Commit` must carry the real commit hash.
 - ADR-0001 — Adopt Workspace model over Dashboard
 - ADR-0002 — Event First as the core data model
 - ADR-0003 — Calendar is Navigation, not the primary workspace
+- ADR-0014 — AI Control Tower Portability

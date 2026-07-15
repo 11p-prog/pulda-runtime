@@ -1,6 +1,6 @@
 # Account, Data, and Migration Governance
 
-Status: Prepared for review  
+Status: Implemented — policy/document only; Runtime enforcement and user verification pending
 Canonical authority: Notion `28 Account, Data & Portfolio Governance v0.1` and Pulda OS Operating Model  
 Target repository path: `docs/governance/ACCOUNT-DATA-MIGRATION.md`
 

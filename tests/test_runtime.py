@@ -11,6 +11,7 @@ from pulda.service import (
     create_event, list_events, update_status, build_review, update_event, defer_event,
     get_event, delete_event, soft_delete_event, context_workspace, add_attachment, group_events_by_date,
     context_events, distinct_projects,
+    interpret_event, correct_interpretation, record_outcome, propose_follow_up,
 )
 from pulda.timeutil import date_label, today_kst
 from datetime import timedelta
@@ -34,6 +35,34 @@ def test_event_lifecycle():
     update_status(event_id, "done")
     done = list_events("done")
     assert any(r["id"] == event_id for r in done)
+
+def test_first_living_loop_reuses_human_correction():
+    first_event_id = create_event("VIP 고객 홈페이지 검토")
+    first_interpretation = interpret_event(first_event_id)
+    assert first_interpretation["role"] == "회사"
+    assert first_interpretation["source_evidence"] == f"event:{first_event_id}:original"
+    assert first_interpretation["model"] == "rule-based-v0"
+
+    correction = correct_interpretation(
+        first_interpretation["id"],
+        field_name="importance",
+        new_value="5",
+        rationale="VIP 고객 요청은 최우선 검토",
+        scope="reusable",
+        reusable_match_text="VIP",
+    )
+    assert correction["scope"] == "reusable"
+    assert correction["rule_id"] is not None
+
+    outcome = record_outcome(first_event_id, "요구사항 확인 완료")
+    follow_up = propose_follow_up(first_event_id, outcome["id"], "견적 범위를 확정한다")
+    assert follow_up["status"] == "proposed"
+
+    next_event_id = create_event("VIP 신규 문의 회신")
+    next_interpretation = interpret_event(next_event_id)
+    assert next_interpretation["importance"] == 5
+    assert correction["rule_id"] in next_interpretation["applied_rule_ids"]
+    assert get_event(next_event_id)["text"] == "VIP 신규 문의 회신"
 
 def test_review():
     result = build_review()

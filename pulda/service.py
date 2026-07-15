@@ -1,7 +1,163 @@
 from datetime import datetime, date
+import json
 from .timeutil import now_kst, today_kst, date_label
 from .db import connect
 from .classifier import classify
+
+INTERPRETATION_FIELDS = {"role", "area", "kind", "urgency", "importance"}
+
+def _coerce_interpretation_value(field_name: str, value: str):
+    if field_name in {"urgency", "importance"}:
+        number = int(value)
+        if not 1 <= number <= 5:
+            raise ValueError(f"{field_name} must be between 1 and 5")
+        return number
+    return value
+
+def interpret_event(
+    event_id: int,
+    *,
+    model: str = "rule-based-v0",
+    prompt_version: str = "living-loop-v0.1",
+    dna_version: str = "notion-2026-07-15",
+    confidence: float = 0.5,
+) -> dict:
+    """Create a versioned interpretation without overwriting the Event original."""
+    event = get_event(event_id)
+    if not event:
+        raise ValueError("event not found")
+    base = classify(event["text"])
+    values = {
+        "role": base.role,
+        "area": base.area,
+        "kind": base.kind,
+        "urgency": base.urgency,
+        "importance": base.importance,
+    }
+    applied_rule_ids: list[int] = []
+    with connect() as conn:
+        rules = conn.execute(
+            "SELECT * FROM correction_rules WHERE active=1 ORDER BY id"
+        ).fetchall()
+        for rule in rules:
+            if rule["match_text"] in event["text"] and rule["target_field"] in values:
+                values[rule["target_field"]] = _coerce_interpretation_value(
+                    rule["target_field"], rule["target_value"]
+                )
+                applied_rule_ids.append(rule["id"])
+        row = conn.execute(
+            "SELECT COALESCE(MAX(revision_no),0)+1 AS revision_no FROM event_interpretations WHERE event_id=?",
+            (event_id,),
+        ).fetchone()
+        revision_no = row["revision_no"]
+        now = now_kst().isoformat(timespec="seconds")
+        cur = conn.execute(
+            """INSERT INTO event_interpretations
+            (event_id,revision_no,summary,role,area,kind,urgency,importance,
+             confidence,model,prompt_version,dna_version,source_evidence,
+             applied_rule_ids,created_at)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                event_id, revision_no, event["text"], values["role"], values["area"],
+                values["kind"], values["urgency"], values["importance"], confidence,
+                model, prompt_version, dna_version, f"event:{event_id}:original",
+                json.dumps(applied_rule_ids), now,
+            ),
+        )
+        interpretation_id = cur.lastrowid
+        result = conn.execute(
+            "SELECT * FROM event_interpretations WHERE id=?", (interpretation_id,)
+        ).fetchone()
+    audit("interpret_event", str(event_id), "success", f"revision={revision_no}")
+    interpreted = dict(result)
+    interpreted["applied_rule_ids"] = json.loads(interpreted["applied_rule_ids"])
+    return interpreted
+
+def correct_interpretation(
+    interpretation_id: int,
+    *,
+    field_name: str,
+    new_value: str,
+    rationale: str,
+    scope: str = "one_time",
+    reusable_match_text: str | None = None,
+) -> dict:
+    """Preserve a human correction separately and optionally create a reusable rule."""
+    if field_name not in INTERPRETATION_FIELDS:
+        raise ValueError("invalid interpretation field")
+    if scope not in {"one_time", "reusable"}:
+        raise ValueError("invalid correction scope")
+    if scope == "reusable" and not reusable_match_text:
+        raise ValueError("reusable correction requires reusable_match_text")
+    coerced = _coerce_interpretation_value(field_name, new_value)
+    stored_value = str(coerced)
+    now = now_kst().isoformat(timespec="seconds")
+    with connect() as conn:
+        interpretation = conn.execute(
+            "SELECT * FROM event_interpretations WHERE id=?", (interpretation_id,)
+        ).fetchone()
+        if not interpretation:
+            raise ValueError("interpretation not found")
+        rule_id = None
+        if scope == "reusable":
+            cur = conn.execute(
+                """INSERT INTO correction_rules
+                (match_text,target_field,target_value,rationale,active,created_at,updated_at)
+                VALUES(?,?,?,?,1,?,?)""",
+                (reusable_match_text, field_name, stored_value, rationale, now, now),
+            )
+            rule_id = cur.lastrowid
+        cur = conn.execute(
+            """INSERT INTO event_corrections
+            (event_id,interpretation_id,field_name,old_value,new_value,scope,
+             rationale,rule_id,created_at)
+            VALUES(?,?,?,?,?,?,?,?,?)""",
+            (
+                interpretation["event_id"], interpretation_id, field_name,
+                str(interpretation[field_name]), stored_value, scope, rationale,
+                rule_id, now,
+            ),
+        )
+        correction_id = cur.lastrowid
+        result = conn.execute(
+            "SELECT * FROM event_corrections WHERE id=?", (correction_id,)
+        ).fetchone()
+    audit("correct_interpretation", str(interpretation["event_id"]), "success", scope)
+    return dict(result)
+
+def record_outcome(event_id: int, result_text: str, status: str = "recorded") -> dict:
+    if not get_event(event_id):
+        raise ValueError("event not found")
+    now = now_kst().isoformat(timespec="seconds")
+    with connect() as conn:
+        cur = conn.execute(
+            "INSERT INTO event_outcomes(event_id,result_text,status,created_at) VALUES(?,?,?,?)",
+            (event_id, result_text, status, now),
+        )
+        result = conn.execute(
+            "SELECT * FROM event_outcomes WHERE id=?", (cur.lastrowid,)
+        ).fetchone()
+    audit("record_outcome", str(event_id), "success", status)
+    return dict(result)
+
+def propose_follow_up(event_id: int, outcome_id: int, text: str) -> dict:
+    now = now_kst().isoformat(timespec="seconds")
+    with connect() as conn:
+        outcome = conn.execute(
+            "SELECT * FROM event_outcomes WHERE id=? AND event_id=?", (outcome_id, event_id)
+        ).fetchone()
+        if not outcome:
+            raise ValueError("outcome not found for event")
+        cur = conn.execute(
+            """INSERT INTO follow_up_proposals(event_id,outcome_id,text,status,created_at)
+            VALUES(?,?,?,'proposed',?)""",
+            (event_id, outcome_id, text, now),
+        )
+        result = conn.execute(
+            "SELECT * FROM follow_up_proposals WHERE id=?", (cur.lastrowid,)
+        ).fetchone()
+    audit("propose_follow_up", str(event_id), "success", str(outcome_id))
+    return dict(result)
 
 def audit(action: str, target: str | None, status: str, detail: str = "") -> None:
     now = now_kst().isoformat(timespec="seconds")

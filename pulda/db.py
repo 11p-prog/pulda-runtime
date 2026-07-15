@@ -58,6 +58,62 @@ CREATE TABLE IF NOT EXISTS attachments (
   size_bytes INTEGER NOT NULL,
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS event_interpretations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id INTEGER NOT NULL REFERENCES events(id),
+  revision_no INTEGER NOT NULL,
+  summary TEXT NOT NULL,
+  role TEXT NOT NULL,
+  area TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  urgency INTEGER NOT NULL,
+  importance INTEGER NOT NULL,
+  confidence REAL NOT NULL,
+  model TEXT NOT NULL,
+  prompt_version TEXT NOT NULL,
+  dna_version TEXT NOT NULL,
+  source_evidence TEXT NOT NULL,
+  applied_rule_ids TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL,
+  UNIQUE(event_id, revision_no)
+);
+CREATE TABLE IF NOT EXISTS correction_rules (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  match_text TEXT NOT NULL,
+  target_field TEXT NOT NULL,
+  target_value TEXT NOT NULL,
+  rationale TEXT NOT NULL,
+  active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS event_corrections (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id INTEGER NOT NULL REFERENCES events(id),
+  interpretation_id INTEGER NOT NULL REFERENCES event_interpretations(id),
+  field_name TEXT NOT NULL,
+  old_value TEXT,
+  new_value TEXT NOT NULL,
+  scope TEXT NOT NULL CHECK(scope IN ('one_time','reusable')),
+  rationale TEXT NOT NULL,
+  rule_id INTEGER REFERENCES correction_rules(id),
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS event_outcomes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id INTEGER NOT NULL REFERENCES events(id),
+  result_text TEXT NOT NULL,
+  status TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS follow_up_proposals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id INTEGER NOT NULL REFERENCES events(id),
+  outcome_id INTEGER NOT NULL REFERENCES event_outcomes(id),
+  text TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'proposed',
+  created_at TEXT NOT NULL
+);
 """
 
 NEW_EVENT_COLUMNS = {

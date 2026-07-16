@@ -4,6 +4,15 @@ Status: design placeholder only. Nothing in this document is built yet.
 Captured now so Phase 2 starts from a provider-independent architecture
 instead of a Google-Docs-shaped one-off, per explicit user direction.
 
+## Live single-item knowledge capture boundary
+
+CR-0014 implements a separate, deliberately small path for one current web
+source: Event-first capture, portable metadata, duplicate prevention by
+canonical URL, and contextual retrieval. It does **not** implement this
+historical bulk pipeline or resolve its connector, privacy, timeline, and
+review questions. A successful single-item case may inform the later pipeline,
+but must not silently unblock CR-0005.
+
 ## Why "pipeline", not "Google Docs import"
 
 The user's first source is Google Docs journals, but the requirement is a

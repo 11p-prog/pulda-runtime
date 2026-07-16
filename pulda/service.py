@@ -6,6 +6,113 @@ from .classifier import classify
 
 INTERPRETATION_FIELDS = {"role", "area", "kind", "urgency", "importance"}
 
+def _knowledge_source_dict(row) -> dict:
+    result = dict(row)
+    result["tags"] = json.loads(result.pop("tags_json"))
+    result["related_contexts"] = json.loads(result.pop("related_contexts_json"))
+    result["metadata"] = json.loads(result.pop("metadata_json"))
+    return result
+
+def capture_knowledge_source(
+    *,
+    canonical_url: str,
+    title: str,
+    summary: str,
+    relevance_note: str,
+    publisher: str | None = None,
+    published_at: str | None = None,
+    source_type: str = "web",
+    storage_uri: str | None = None,
+    storage_format: str = "url-reference",
+    archival_status: str = "reference_only",
+    tags: list[str] | None = None,
+    related_contexts: list[str] | None = None,
+    content_hash: str | None = None,
+    metadata: dict | None = None,
+    project: str | None = None,
+) -> dict:
+    """Capture one external information item as an Event plus source metadata.
+
+    The canonical URL is the idempotency key. ``storage_uri`` may later point
+    to a user-owned Drive/local archive; until then ``reference_only`` makes
+    the absence of an archived copy explicit instead of implying preservation.
+    """
+    if not canonical_url.strip() or not title.strip():
+        raise ValueError("canonical_url and title are required")
+    with connect() as conn:
+        existing = conn.execute(
+            "SELECT * FROM knowledge_sources WHERE canonical_url=?",
+            (canonical_url.strip(),),
+        ).fetchone()
+    if existing:
+        return _knowledge_source_dict(existing)
+
+    event_id = create_event(
+        title.strip(),
+        source=f"knowledge:{source_type}",
+        project=project,
+    )
+    now = now_kst().isoformat(timespec="seconds")
+    try:
+        with connect() as conn:
+            cur = conn.execute(
+                """INSERT INTO knowledge_sources
+                (event_id,source_type,canonical_url,title,publisher,published_at,
+                 storage_uri,storage_format,archival_status,summary,relevance_note,
+                 tags_json,related_contexts_json,content_hash,metadata_json,
+                 created_at,updated_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    event_id, source_type, canonical_url.strip(), title.strip(),
+                    publisher, published_at, storage_uri or canonical_url.strip(),
+                    storage_format, archival_status, summary.strip(),
+                    relevance_note.strip(), json.dumps(tags or [], ensure_ascii=False),
+                    json.dumps(related_contexts or [], ensure_ascii=False), content_hash,
+                    json.dumps(metadata or {}, ensure_ascii=False, sort_keys=True), now, now,
+                ),
+            )
+            row = conn.execute(
+                "SELECT * FROM knowledge_sources WHERE id=?", (cur.lastrowid,)
+            ).fetchone()
+    except Exception:
+        delete_event(event_id)
+        raise
+    audit("capture_knowledge_source", str(event_id), "success", canonical_url)
+    return _knowledge_source_dict(row)
+
+def get_knowledge_source(source_id: int) -> dict | None:
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM knowledge_sources WHERE id=?", (source_id,)
+        ).fetchone()
+    return _knowledge_source_dict(row) if row else None
+
+def find_relevant_knowledge(query: str, project: str | None = None, limit: int = 10) -> list[dict]:
+    """Return contextual source candidates using portable SQLite text matching."""
+    terms = [term.strip() for term in query.split() if term.strip()]
+    clauses: list[str] = []
+    params: list = []
+    for term in terms:
+        clauses.append(
+            "(title LIKE ? OR summary LIKE ? OR relevance_note LIKE ? "
+            "OR tags_json LIKE ? OR related_contexts_json LIKE ?)"
+        )
+        like = f"%{term}%"
+        params.extend([like] * 5)
+    if project:
+        clauses.append("(e.project=? OR related_contexts_json LIKE ?)")
+        params.extend([project, f"%{project}%"])
+    q = """SELECT k.* FROM knowledge_sources k
+           JOIN events e ON e.id=k.event_id
+           WHERE e.deleted_at IS NULL"""
+    if clauses:
+        q += " AND " + " AND ".join(clauses)
+    q += " ORDER BY k.published_at DESC, k.created_at DESC LIMIT ?"
+    params.append(limit)
+    with connect() as conn:
+        rows = conn.execute(q, params).fetchall()
+    return [_knowledge_source_dict(row) for row in rows]
+
 def _coerce_interpretation_value(field_name: str, value: str):
     if field_name in {"urgency", "importance"}:
         number = int(value)
@@ -209,6 +316,7 @@ def delete_event(event_id: int) -> None:
     (e.g. a double-tapped submit button) where no meaningful history exists
     yet and a permanent record would just be noise."""
     with connect() as conn:
+        conn.execute("DELETE FROM knowledge_sources WHERE event_id=?", (event_id,))
         conn.execute("DELETE FROM attachments WHERE event_id=?", (event_id,))
         conn.execute("DELETE FROM event_history WHERE event_id=?", (event_id,))
         conn.execute("DELETE FROM events WHERE id=?", (event_id,))

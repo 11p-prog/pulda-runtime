@@ -12,6 +12,7 @@ from pulda.service import (
     get_event, delete_event, soft_delete_event, context_workspace, add_attachment, group_events_by_date,
     context_events, distinct_projects,
     interpret_event, correct_interpretation, record_outcome, propose_follow_up,
+    capture_knowledge_source, find_relevant_knowledge,
 )
 from pulda.timeutil import date_label, today_kst
 from datetime import timedelta
@@ -114,6 +115,63 @@ def test_living_loop_is_executable_through_api():
     assert next_interpretation.status_code == 200
     assert next_interpretation.json()["importance"] == 5
     assert rule_id in next_interpretation.json()["applied_rule_ids"]
+
+def test_first_contextual_knowledge_case_is_idempotent_and_retrievable():
+    item = capture_knowledge_source(
+        canonical_url="https://www.cio.com/article/4196592/example",
+        title="모두의 AI 지원사업",
+        publisher="CIO Korea",
+        published_at="2026-07-14",
+        summary="정부가 범용 AI 챗봇과 공공 AI 에이전트를 지원한다.",
+        relevance_note="Pulda OS의 소버린 AI 및 멀티모델 전환 대비 근거",
+        tags=["소버린 AI", "공공 AI", "멀티모델"],
+        related_contexts=["PRJ-PULDA-OS", "AI provider portability"],
+        project="PRJ-PULDA-OS",
+        metadata={"capture_case": "KNOW-0001"},
+    )
+    duplicate = capture_knowledge_source(
+        canonical_url="https://www.cio.com/article/4196592/example",
+        title="중복 제목은 적용되지 않음",
+        summary="중복",
+        relevance_note="중복",
+    )
+    assert duplicate["id"] == item["id"]
+    assert duplicate["event_id"] == item["event_id"]
+    assert item["archival_status"] == "reference_only"
+    assert item["storage_format"] == "url-reference"
+    assert item["metadata"]["capture_case"] == "KNOW-0001"
+
+    relevant = find_relevant_knowledge("소버린 AI", project="PRJ-PULDA-OS")
+    assert [row["id"] for row in relevant] == [item["id"]]
+    assert "멀티모델" in relevant[0]["tags"]
+
+def test_contextual_knowledge_case_is_executable_through_api():
+    from fastapi.testclient import TestClient
+    from pulda.app import app
+
+    client = TestClient(app)
+    payload = {
+        "canonical_url": "https://www.cio.com/article/4196592/api-example",
+        "title": "AI도 한글처럼",
+        "publisher": "CIO Korea",
+        "published_at": "2026-07-14",
+        "summary": "전 국민 무료 AI 챗봇과 공공 AI 에이전트 사업",
+        "relevance_note": "Pulda OS 모델 독립성과 실행 통제 설계에 관련",
+        "tags": ["국산 AI", "AI 에이전트"],
+        "related_contexts": ["PRJ-PULDA-OS"],
+        "project": "PRJ-PULDA-OS",
+    }
+    captured = client.post("/api/knowledge-sources", json=payload)
+    assert captured.status_code == 200
+    source = captured.json()
+    assert get_event(source["event_id"])["source"] == "knowledge:web"
+
+    result = client.get(
+        "/api/knowledge-sources/relevant",
+        params={"query": "AI 에이전트", "project": "PRJ-PULDA-OS"},
+    )
+    assert result.status_code == 200
+    assert any(row["id"] == source["id"] for row in result.json())
 
 def test_review():
     result = build_review()

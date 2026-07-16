@@ -114,6 +114,26 @@ CREATE TABLE IF NOT EXISTS follow_up_proposals (
   status TEXT NOT NULL DEFAULT 'proposed',
   created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS knowledge_sources (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id INTEGER NOT NULL UNIQUE REFERENCES events(id),
+  source_type TEXT NOT NULL,
+  canonical_url TEXT NOT NULL UNIQUE,
+  title TEXT NOT NULL,
+  publisher TEXT,
+  published_at TEXT,
+  storage_uri TEXT NOT NULL,
+  storage_format TEXT NOT NULL,
+  archival_status TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  relevance_note TEXT NOT NULL,
+  tags_json TEXT NOT NULL DEFAULT '[]',
+  related_contexts_json TEXT NOT NULL DEFAULT '[]',
+  content_hash TEXT,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 """
 
 NEW_EVENT_COLUMNS = {

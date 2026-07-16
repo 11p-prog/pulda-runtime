@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from .timeutil import today_kst
 from .config import settings
 from fastapi.templating import Jinja2Templates
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from .db import init_db
 from .service import (
     create_event, list_events, update_status, today_plan, build_review, latest_review, health,
@@ -16,6 +16,7 @@ from .service import (
     distinct_projects, context_workspace, context_events, calendar_activity, review_for_date,
     add_attachment, get_attachment, group_events_by_date,
     interpret_event, correct_interpretation, record_outcome, propose_follow_up,
+    capture_knowledge_source, get_knowledge_source, find_relevant_knowledge,
 )
 from .connectors import sync_notion, sync_github, check_notion, check_github
 from .scheduler import start_scheduler
@@ -75,6 +76,23 @@ class OutcomeIn(BaseModel):
 class FollowUpIn(BaseModel):
     outcome_id: int
     text: str
+
+class KnowledgeSourceIn(BaseModel):
+    canonical_url: str
+    title: str
+    summary: str
+    relevance_note: str
+    publisher: str | None = None
+    published_at: str | None = None
+    source_type: str = "web"
+    storage_uri: str | None = None
+    storage_format: str = "url-reference"
+    archival_status: str = "reference_only"
+    tags: list[str] = Field(default_factory=list)
+    related_contexts: list[str] = Field(default_factory=list)
+    content_hash: str | None = None
+    metadata: dict = Field(default_factory=dict)
+    project: str | None = None
 
 @app.on_event("startup")
 def startup():
@@ -328,6 +346,24 @@ def api_events(status: str | None = None):
 @app.get("/api/events/attention")
 def api_events_attention():
     return attention_items()
+
+@app.post("/api/knowledge-sources")
+def api_capture_knowledge_source(item: KnowledgeSourceIn):
+    try:
+        return capture_knowledge_source(**item.model_dump())
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+@app.get("/api/knowledge-sources/relevant")
+def api_relevant_knowledge(query: str, project: str | None = None, limit: int = 10):
+    return find_relevant_knowledge(query, project=project, limit=min(max(limit, 1), 100))
+
+@app.get("/api/knowledge-sources/{source_id}")
+def api_get_knowledge_source(source_id: int):
+    source = get_knowledge_source(source_id)
+    if not source:
+        raise HTTPException(404, "knowledge source not found")
+    return source
 
 @app.get("/api/events/{event_id}")
 def api_get_event(event_id: int):

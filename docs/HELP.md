@@ -35,6 +35,23 @@ reproducible backend loop is available through these endpoints:
 This is backend execution evidence, not user verification. The classifier is
 still rule-based and there is no live LLM provider or human-review UI.
 
+## Capture and retrieve one knowledge source by API
+
+- `POST /api/knowledge-sources` creates an ordinary Event and links source
+  metadata. Required fields are `canonical_url`, `title`, `summary`, and
+  `relevance_note`; project, tags, related contexts, storage information, hash,
+  and extra metadata are optional.
+- The canonical URL prevents duplicate Events when the same item is captured
+  again.
+- `GET /api/knowledge-sources/relevant?query=...&project=...` retrieves sources
+  whose title, summary, relevance, tags, or related contexts match the query.
+- `archival_status: reference_only` means only the original URL is currently
+  preserved. Change the storage URI/status only after a real user-owned
+  Drive/local copy exists. Pulda must not imply that an original was archived
+  when it was not.
+- This first case is API-only. It does not import the historical backlog,
+  extract full text, call external AI, or synchronize files offline.
+
 ## Change and delete records
 
 - Normal delete is a soft delete: the Event disappears from active lists but

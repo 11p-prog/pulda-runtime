@@ -36,6 +36,10 @@ Never infer current project state from chat memory alone.
 - Prepare Git changes as complete replacement files whenever safe; never place patch instructions at a canonical file path.
 - When a full overwrite risks losing unrelated content, provide an exact VS Code target file, anchor text, and replacement region instead.
 - The user reviews, commits, and pushes through GitHub Desktop; afterward the AI re-reads the remote commit and affected files.
+- Treat `docs/HELP.md` as a living user-facing source: every user-visible behavior
+  or constraint change updates it in the same Git change. Essential first-use
+  knowledge must also be planned for an inline guide or tooltip; Help alone is
+  not a substitute for discoverability.
 
 ## Minimum model rule
 

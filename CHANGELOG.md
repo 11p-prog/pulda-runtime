@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- 2026-07-16 — Exposed the first backend Living Loop through API endpoints for
+  versioned interpretation, human correction, outcome recording, and follow-up
+  proposals. Added an API-boundary regression test proving that a reusable
+  correction changes the next comparable interpretation, and established
+  `docs/HELP.md` as the living user guide.
+
 - 2026-07-14 — Phase 0 governance reset integrated without adding duplicate
   operating/privacy documents:
   - added root `AGENTS.md` and versioned `PROJECT_INSTRUCTIONS.md`;

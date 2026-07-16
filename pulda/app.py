@@ -15,6 +15,7 @@ from .service import (
     life_balance, decision_support, operations_summary, save_reflection,
     distinct_projects, context_workspace, context_events, calendar_activity, review_for_date,
     add_attachment, get_attachment, group_events_by_date,
+    interpret_event, correct_interpretation, record_outcome, propose_follow_up,
 )
 from .connectors import sync_notion, sync_github, check_notion, check_github
 from .scheduler import start_scheduler
@@ -53,6 +54,27 @@ class EventPatch(BaseModel):
 class DeferIn(BaseModel):
     reason: str
     next_review_at: str | None = None
+
+class InterpretationIn(BaseModel):
+    model: str = "rule-based-v0"
+    prompt_version: str = "living-loop-v0.1"
+    dna_version: str = "notion-2026-07-15"
+    confidence: float = 0.5
+
+class CorrectionIn(BaseModel):
+    field_name: str
+    new_value: str
+    rationale: str
+    scope: str = "one_time"
+    reusable_match_text: str | None = None
+
+class OutcomeIn(BaseModel):
+    result_text: str
+    status: str = "recorded"
+
+class FollowUpIn(BaseModel):
+    outcome_id: int
+    text: str
 
 @app.on_event("startup")
 def startup():
@@ -325,6 +347,34 @@ def api_patch_event(event_id: int, patch: EventPatch):
 def api_defer_event(event_id: int, body: DeferIn):
     try:
         return defer_event(event_id, body.reason, body.next_review_at)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+@app.post("/api/events/{event_id}/interpretations")
+def api_interpret_event(event_id: int, body: InterpretationIn):
+    try:
+        return interpret_event(event_id, **body.model_dump())
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+@app.post("/api/interpretations/{interpretation_id}/corrections")
+def api_correct_interpretation(interpretation_id: int, body: CorrectionIn):
+    try:
+        return correct_interpretation(interpretation_id, **body.model_dump())
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+@app.post("/api/events/{event_id}/outcomes")
+def api_record_outcome(event_id: int, body: OutcomeIn):
+    try:
+        return record_outcome(event_id, body.result_text, body.status)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+@app.post("/api/events/{event_id}/follow-ups")
+def api_propose_follow_up(event_id: int, body: FollowUpIn):
+    try:
+        return propose_follow_up(event_id, body.outcome_id, body.text)
     except ValueError as e:
         raise HTTPException(400, str(e))
 

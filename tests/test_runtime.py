@@ -64,6 +64,57 @@ def test_first_living_loop_reuses_human_correction():
     assert correction["rule_id"] in next_interpretation["applied_rule_ids"]
     assert get_event(next_event_id)["text"] == "VIP 신규 문의 회신"
 
+def test_living_loop_is_executable_through_api():
+    from fastapi.testclient import TestClient
+    from pulda.app import app
+
+    client = TestClient(app)
+    first = client.post("/api/events", json={"text": "API우선 고객 요구사항 확인"})
+    assert first.status_code == 200
+    first_event_id = first.json()["id"]
+
+    interpreted = client.post(
+        f"/api/events/{first_event_id}/interpretations",
+        json={"confidence": 0.8},
+    )
+    assert interpreted.status_code == 200
+    interpretation = interpreted.json()
+    assert interpretation["source_evidence"] == f"event:{first_event_id}:original"
+
+    corrected = client.post(
+        f"/api/interpretations/{interpretation['id']}/corrections",
+        json={
+            "field_name": "importance",
+            "new_value": "5",
+            "rationale": "API우선 고객은 최우선으로 검토한다",
+            "scope": "reusable",
+            "reusable_match_text": "API우선",
+        },
+    )
+    assert corrected.status_code == 200
+    rule_id = corrected.json()["rule_id"]
+
+    outcome = client.post(
+        f"/api/events/{first_event_id}/outcomes",
+        json={"result_text": "요구사항 확인 완료"},
+    )
+    assert outcome.status_code == 200
+    follow_up = client.post(
+        f"/api/events/{first_event_id}/follow-ups",
+        json={"outcome_id": outcome.json()["id"], "text": "견적 범위를 확정한다"},
+    )
+    assert follow_up.status_code == 200
+    assert follow_up.json()["status"] == "proposed"
+
+    second = client.post("/api/events", json={"text": "API우선 신규 문의 회신"})
+    second_event_id = second.json()["id"]
+    next_interpretation = client.post(
+        f"/api/events/{second_event_id}/interpretations", json={}
+    )
+    assert next_interpretation.status_code == 200
+    assert next_interpretation.json()["importance"] == 5
+    assert rule_id in next_interpretation.json()["applied_rule_ids"]
+
 def test_review():
     result = build_review()
     assert "Daily Review" in result["summary"]

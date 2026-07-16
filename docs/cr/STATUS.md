@@ -38,7 +38,10 @@ alone is insufficient. `Related Git Commit` must carry the real commit hash.
 | CR-0011 | User-Managed Workspace Tabs (Replit-Style Add/Remove) | High | Reverted — superseded by CR-0012/IA-0001 per User decision | Replit | User | 2026-07-13 | 2026-07-13 |
 | CR-0012 | Imported: Home and Event Feed Redesign (pulda-ux-handoff-v0.1) | High | Implemented (covered by test) | ChatGPT | User | 2026-07-13 | 2026-07-13 |
 | CR-0013 | Restore the First Living Loop | High | In Progress — rule-based loop implemented; actual AI/LLM not connected; Living Loop incomplete; user verification not performed (AI connection prerequisite) | ChatGPT | User | 2026-07-13 | 2026-07-16 |
+<<<<<<< HEAD
 | CR-0014 | First Contextual Knowledge Case | High | Prepared locally — code/schema/API/docs/tests ready; remote commit and Runtime user verification pending | Codex | User | 2026-07-17 | 2026-07-17 |
+=======
+>>>>>>> d6422273861e3bea9d6ed1c5e0eee78bc5d35638
 
 ## RFCs open for discussion
 - RFC-0001 — AI Memory Structure

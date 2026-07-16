@@ -22,13 +22,13 @@ args = "Start application"
 name = "Start application"
 author = "agent"
 
+[workflows.workflow.metadata]
+outputType = "webview"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python -m pulda.app"
 waitForPort = 5000
-
-[workflows.workflow.metadata]
-outputType = "webview"
 
 [[ports]]
 localPort = 5000
@@ -37,8 +37,10 @@ externalPort = 80
 [userenv]
 
 [userenv.shared]
-AUTO_SYNC_NOTION = "true"
+AUTO_SYNC_NOTION = "false"
 NOTION_SYNC_PAGE_ID = "39be35ff-69e0-81f5-b7f1-fccd826d47a7"
-AUTO_SYNC_GITHUB = "true"
+AUTO_SYNC_GITHUB = "false"
 GITHUB_BRANCH = "main"
 GITHUB_REPOSITORY = "11p-prog/pulda-runtime"
+PULDA_HOST = "0.0.0.0"
+PULDA_PORT = "5000"

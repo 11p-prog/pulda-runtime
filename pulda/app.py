@@ -17,6 +17,7 @@ from .service import (
     add_attachment, get_attachment, group_events_by_date,
     interpret_event, correct_interpretation, record_outcome, propose_follow_up,
     capture_knowledge_source, get_knowledge_source, find_relevant_knowledge,
+    capture_daily_activity, get_daily_activity,
 )
 from .connectors import sync_notion, sync_github, check_notion, check_github
 from .scheduler import start_scheduler
@@ -93,6 +94,28 @@ class KnowledgeSourceIn(BaseModel):
     content_hash: str | None = None
     metadata: dict = Field(default_factory=dict)
     project: str | None = None
+
+class DailyActivityItemIn(BaseModel):
+    item_key: str | None = None
+    item_type: str
+    project: str | None = None
+    summary: str
+    source_ref: str | None = None
+    review_state: str = "register"
+
+class DailyActivityIn(BaseModel):
+    activity_date: str
+    source_channel: str = "chatgpt"
+    external_key: str
+    source_coverage: str = ""
+    access_gaps: str = ""
+    privacy_reviewed: bool = False
+    items: list[DailyActivityItemIn] = Field(default_factory=list)
+
+def _require_daily_activity_token(request: Request) -> None:
+    expected = settings.daily_activity_ingest_token
+    if expected and request.headers.get("authorization") != f"Bearer {expected}":
+        raise HTTPException(401, "invalid daily activity ingest token")
 
 @app.on_event("startup")
 def startup():
@@ -338,6 +361,30 @@ def github_action():
 @app.post("/api/events")
 def api_create_event(item: EventIn):
     return {"id": create_event(item.text, item.source)}
+
+@app.post("/api/daily-activities")
+def api_capture_daily_activity(item: DailyActivityIn, request: Request):
+    _require_daily_activity_token(request)
+    try:
+        return capture_daily_activity(
+            activity_date=item.activity_date,
+            source_channel=item.source_channel,
+            external_key=item.external_key,
+            source_coverage=item.source_coverage,
+            access_gaps=item.access_gaps,
+            privacy_reviewed=item.privacy_reviewed,
+            items=[entry.model_dump() for entry in item.items],
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+@app.get("/api/daily-activities/{activity_date}")
+def api_get_daily_activity(activity_date: str, request: Request, source_channel: str = "chatgpt"):
+    _require_daily_activity_token(request)
+    result = get_daily_activity(activity_date, source_channel)
+    if not result:
+        raise HTTPException(404, "daily activity not found")
+    return result
 
 @app.get("/api/events")
 def api_events(status: str | None = None):

@@ -13,6 +13,7 @@ from pulda.service import (
     context_events, distinct_projects,
     interpret_event, correct_interpretation, record_outcome, propose_follow_up,
     capture_knowledge_source, find_relevant_knowledge,
+    capture_daily_activity, get_daily_activity,
 )
 from pulda.timeutil import date_label, today_kst
 from datetime import timedelta
@@ -115,6 +116,107 @@ def test_living_loop_is_executable_through_api():
     assert next_interpretation.status_code == 200
     assert next_interpretation.json()["importance"] == 5
     assert rule_id in next_interpretation.json()["applied_rule_ids"]
+
+def test_daily_activity_capture_is_date_scoped_idempotent_and_portable():
+    payload = {
+        "activity_date": "2026-07-18",
+        "source_channel": "chatgpt",
+        "external_key": "chatgpt:primary:2026-07-18",
+        "source_coverage": "connected project conversations and approved Notion records",
+        "access_gaps": "some unrelated conversations unavailable",
+        "privacy_reviewed": True,
+        "items": [
+            {
+                "item_type": "decision",
+                "project": "PRJ-PULDA-OS",
+                "summary": "22:30을 일일 운영 종료 기준으로 사용한다.",
+                "source_ref": "notion:CR-0015",
+                "review_state": "register",
+            },
+            {
+                "item_type": "hold",
+                "project": "PRJ-PULDA-OS",
+                "summary": "Runtime 직접 등록 어댑터 검증이 남아 있다.",
+                "review_state": "record_only",
+            },
+        ],
+    }
+    first = capture_daily_activity(**payload)
+    assert first["created"] is True
+    assert first["added_count"] == 2
+    assert first["event"]["source"] == "daily_activity:chatgpt"
+    assert first["event"]["project"] == "PRJ-PULDA-OS"
+
+    repeated = capture_daily_activity(**payload)
+    assert repeated["created"] is False
+    assert repeated["added_count"] == 0
+    assert repeated["event"]["id"] == first["event"]["id"]
+    assert len(repeated["items"]) == 2
+
+    exported = get_daily_activity("2026-07-18", "chatgpt")
+    assert exported["batch"]["external_key"] == payload["external_key"]
+    assert exported["batch"]["source_coverage"] == payload["source_coverage"]
+    assert {item["item_type"] for item in exported["items"]} == {"decision", "hold"}
+
+def test_daily_activity_api_returns_event_id_and_rejects_invalid_items():
+    from fastapi.testclient import TestClient
+    from pulda.app import app
+
+    client = TestClient(app)
+    payload = {
+        "activity_date": "2026-07-19",
+        "source_channel": "chatgpt",
+        "external_key": "chatgpt:primary:2026-07-19",
+        "privacy_reviewed": True,
+        "items": [{"item_type": "work_result", "summary": "일일 활동 API 테스트 완료"}],
+    }
+    created = client.post("/api/daily-activities", json=payload)
+    assert created.status_code == 200
+    assert created.json()["event"]["id"] > 0
+    assert created.json()["added_count"] == 1
+
+    fetched = client.get("/api/daily-activities/2026-07-19")
+    assert fetched.status_code == 200
+    assert fetched.json()["event"]["id"] == created.json()["event"]["id"]
+
+    invalid = dict(payload)
+    invalid["activity_date"] = "2026-07-20"
+    invalid["external_key"] = "chatgpt:primary:2026-07-20"
+    invalid["items"] = [{"item_type": "private_secret", "summary": "저장 금지"}]
+    rejected = client.post("/api/daily-activities", json=invalid)
+    assert rejected.status_code == 400
+    assert get_daily_activity("2026-07-20", "chatgpt") is None
+
+def test_daily_activity_requires_privacy_review_and_configured_token():
+    from fastapi.testclient import TestClient
+    from pulda.app import app
+    from pulda.config import settings
+
+    client = TestClient(app)
+    payload = {
+        "activity_date": "2026-07-21",
+        "source_channel": "chatgpt",
+        "external_key": "chatgpt:primary:2026-07-21",
+        "privacy_reviewed": False,
+        "items": [{"item_type": "decision", "summary": "민감정보 검토 전 후보"}],
+    }
+    not_reviewed = client.post("/api/daily-activities", json=payload)
+    assert not_reviewed.status_code == 400
+    assert get_daily_activity("2026-07-21", "chatgpt") is None
+
+    object.__setattr__(settings, "daily_activity_ingest_token", "test-secret")
+    try:
+        payload["privacy_reviewed"] = True
+        unauthorized = client.post("/api/daily-activities", json=payload)
+        assert unauthorized.status_code == 401
+        authorized = client.post(
+            "/api/daily-activities",
+            json=payload,
+            headers={"Authorization": "Bearer test-secret"},
+        )
+        assert authorized.status_code == 200
+    finally:
+        object.__setattr__(settings, "daily_activity_ingest_token", "")
 
 def test_first_contextual_knowledge_case_is_idempotent_and_retrievable():
     item = capture_knowledge_source(

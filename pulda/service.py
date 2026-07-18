@@ -1,10 +1,117 @@
 from datetime import datetime, date
 import json
+import hashlib
 from .timeutil import now_kst, today_kst, date_label
 from .db import connect
 from .classifier import classify
 
 INTERPRETATION_FIELDS = {"role", "area", "kind", "urgency", "importance"}
+DAILY_ACTIVITY_TYPES = {"instruction", "decision", "work_result", "action_candidate", "hold"}
+DAILY_ACTIVITY_REVIEW_STATES = {"register", "record_only", "exclude", "review_needed"}
+
+def _daily_activity_item_key(item: dict) -> str:
+    canonical = json.dumps(
+        {key: item.get(key) for key in ("item_type", "project", "summary", "source_ref")},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+def get_daily_activity(activity_date: str, source_channel: str = "chatgpt") -> dict | None:
+    with connect() as conn:
+        batch = conn.execute(
+            "SELECT * FROM daily_activity_batches WHERE activity_date=? AND source_channel=?",
+            (activity_date, source_channel),
+        ).fetchone()
+        if not batch:
+            return None
+        items = conn.execute(
+            "SELECT * FROM daily_activity_items WHERE batch_id=? ORDER BY id",
+            (batch["id"],),
+        ).fetchall()
+        event = conn.execute("SELECT * FROM events WHERE id=?", (batch["event_id"],)).fetchone()
+    return {"batch": dict(batch), "event": dict(event), "items": [dict(row) for row in items]}
+
+def capture_daily_activity(
+    *,
+    activity_date: str,
+    source_channel: str,
+    external_key: str,
+    items: list[dict],
+    source_coverage: str = "",
+    access_gaps: str = "",
+    privacy_reviewed: bool = False,
+) -> dict:
+    """Register one date/channel activity Event and idempotently append items."""
+    try:
+        date.fromisoformat(activity_date)
+    except ValueError as exc:
+        raise ValueError("activity_date must be YYYY-MM-DD") from exc
+    if not source_channel.strip() or not external_key.strip():
+        raise ValueError("source_channel and external_key are required")
+    if not privacy_reviewed:
+        raise ValueError("privacy_reviewed must be true before Runtime registration")
+    for item in items:
+        if item.get("item_type") not in DAILY_ACTIVITY_TYPES:
+            raise ValueError("invalid daily activity item_type")
+        if item.get("review_state", "register") not in DAILY_ACTIVITY_REVIEW_STATES:
+            raise ValueError("invalid daily activity review_state")
+        if not str(item.get("summary", "")).strip():
+            raise ValueError("daily activity item summary is required")
+
+    existing = get_daily_activity(activity_date, source_channel)
+    created = existing is None
+    if created:
+        event_id = create_event(
+            f"{activity_date} ChatGPT Daily Activity",
+            source=f"daily_activity:{source_channel}",
+            project="PRJ-PULDA-OS",
+        )
+        now = now_kst().isoformat(timespec="seconds")
+        try:
+            with connect() as conn:
+                cur = conn.execute(
+                    """INSERT INTO daily_activity_batches
+                    (event_id,activity_date,source_channel,external_key,source_coverage,access_gaps,privacy_reviewed,status,created_at,updated_at)
+                    VALUES(?,?,?,?,?,?,1,'registered',?,?)""",
+                    (event_id, activity_date, source_channel.strip(), external_key.strip(),
+                     source_coverage.strip(), access_gaps.strip(), now, now),
+                )
+                batch_id = cur.lastrowid
+        except Exception:
+            delete_event(event_id)
+            raise
+    else:
+        event_id = existing["event"]["id"]
+        batch_id = existing["batch"]["id"]
+        now = now_kst().isoformat(timespec="seconds")
+        with connect() as conn:
+            conn.execute(
+                """UPDATE daily_activity_batches
+                SET source_coverage=?, access_gaps=?, privacy_reviewed=1, updated_at=? WHERE id=?""",
+                (source_coverage.strip(), access_gaps.strip(), now, batch_id),
+            )
+
+    added = 0
+    with connect() as conn:
+        for item in items:
+            item_key = item.get("item_key") or _daily_activity_item_key(item)
+            cur = conn.execute(
+                """INSERT OR IGNORE INTO daily_activity_items
+                (batch_id,item_key,item_type,project,summary,source_ref,review_state,created_at,updated_at)
+                VALUES(?,?,?,?,?,?,?,?,?)""",
+                (batch_id, item_key, item["item_type"], item.get("project"),
+                 item["summary"].strip(), item.get("source_ref"),
+                 item.get("review_state", "register"), now, now),
+            )
+            added += cur.rowcount
+        if added:
+            conn.execute("UPDATE events SET updated_at=? WHERE id=?", (now, event_id))
+    audit("capture_daily_activity", str(event_id), "success", f"added={added}")
+    result = get_daily_activity(activity_date, source_channel)
+    result.update({"created": created, "added_count": added})
+    return result
 
 def _knowledge_source_dict(row) -> dict:
     result = dict(row)
@@ -316,6 +423,12 @@ def delete_event(event_id: int) -> None:
     (e.g. a double-tapped submit button) where no meaningful history exists
     yet and a permanent record would just be noise."""
     with connect() as conn:
+        batch = conn.execute(
+            "SELECT id FROM daily_activity_batches WHERE event_id=?", (event_id,)
+        ).fetchone()
+        if batch:
+            conn.execute("DELETE FROM daily_activity_items WHERE batch_id=?", (batch["id"],))
+            conn.execute("DELETE FROM daily_activity_batches WHERE id=?", (batch["id"],))
         conn.execute("DELETE FROM knowledge_sources WHERE event_id=?", (event_id,))
         conn.execute("DELETE FROM attachments WHERE event_id=?", (event_id,))
         conn.execute("DELETE FROM event_history WHERE event_id=?", (event_id,))

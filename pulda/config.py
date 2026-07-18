@@ -26,5 +26,6 @@ class Settings:
     github_token: str = os.getenv("GITHUB_TOKEN", "")
     github_repository: str = os.getenv("GITHUB_REPOSITORY", "")
     github_branch: str = os.getenv("GITHUB_BRANCH", "main")
+    daily_activity_ingest_token: str = os.getenv("PULDA_DAILY_ACTIVITY_INGEST_TOKEN", "")
 
 settings = Settings()

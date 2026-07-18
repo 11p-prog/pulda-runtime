@@ -134,6 +134,33 @@ CREATE TABLE IF NOT EXISTS knowledge_sources (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS daily_activity_batches (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id INTEGER NOT NULL UNIQUE REFERENCES events(id),
+  activity_date TEXT NOT NULL,
+  source_channel TEXT NOT NULL,
+  external_key TEXT NOT NULL UNIQUE,
+  source_coverage TEXT NOT NULL DEFAULT '',
+  access_gaps TEXT NOT NULL DEFAULT '',
+  privacy_reviewed INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'registered',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(activity_date, source_channel)
+);
+CREATE TABLE IF NOT EXISTS daily_activity_items (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  batch_id INTEGER NOT NULL REFERENCES daily_activity_batches(id),
+  item_key TEXT NOT NULL,
+  item_type TEXT NOT NULL CHECK(item_type IN ('instruction','decision','work_result','action_candidate','hold')),
+  project TEXT,
+  summary TEXT NOT NULL,
+  source_ref TEXT,
+  review_state TEXT NOT NULL DEFAULT 'register' CHECK(review_state IN ('register','record_only','exclude','review_needed')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(batch_id, item_key)
+);
 """
 
 NEW_EVENT_COLUMNS = {

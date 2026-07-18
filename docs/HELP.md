@@ -52,6 +52,21 @@ still rule-based and there is no live LLM provider or human-review UI.
 - This first case is API-only. It does not import the historical backlog,
   extract full text, call external AI, or synchronize files offline.
 
+## Register a ChatGPT Daily Activity Event
+
+- `POST /api/daily-activities` creates one Event for an activity date and
+  source channel, then appends typed items without duplicating repeated input.
+- Each item is an `instruction`, `decision`, `work_result`, `action_candidate`,
+  or `hold`, with an optional project, source reference, and review state.
+- `GET /api/daily-activities/{activity_date}` returns the Event ID, source
+  coverage, access gaps, and structured items as portable JSON.
+- Set `PULDA_DAILY_ACTIVITY_INGEST_TOKEN` before exposing these endpoints
+  outside a trusted local environment and send it as a Bearer token.
+- The payload must set `privacy_reviewed: true`; otherwise Runtime rejects it
+  before creating an Event.
+- The API stores only the supplied summaries. It does not read ChatGPT
+  transcripts, credentials, or account-wide conversation history by itself.
+
 ## Change and delete records
 
 - Normal delete is a soft delete: the Event disappears from active lists but

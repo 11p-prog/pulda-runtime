@@ -176,8 +176,11 @@ NEW_EVENT_COLUMNS = {
     "deleted_at": "TEXT",
 }
 
+# Resolved at startup — True only when DATABASE_URL is set AND reachable.
+_postgres_available: bool = False
+
 def database_backend() -> str:
-    return "postgresql" if settings.database_url else "sqlite"
+    return "postgresql" if _postgres_available else "sqlite"
 
 def _migrate_sqlite(conn: sqlite3.Connection) -> None:
     existing = {row[1] for row in conn.execute("PRAGMA table_info(events)").fetchall()}
@@ -193,9 +196,19 @@ def _migrate_sqlite(conn: sqlite3.Connection) -> None:
     conn.execute("DROP TABLE IF EXISTS workspace_tabs")
 
 def init_db() -> None:
+    global _postgres_available
     if settings.database_url:
-        _init_postgres()
-        return
+        try:
+            _init_postgres()
+            _postgres_available = True
+            return
+        except Exception as exc:
+            import logging
+            logging.warning(
+                "PostgreSQL unreachable at startup (%s) — falling back to SQLite. "
+                "Switch to Reserved VM deployment for persistent PostgreSQL access.", exc
+            )
+            _postgres_available = False
     path = Path(settings.db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(path) as conn:
@@ -260,7 +273,7 @@ class _PostgresConnection:
 
 @contextmanager
 def connect():
-    if settings.database_url:
+    if _postgres_available:
         import psycopg
         from psycopg.rows import dict_row
         conn = psycopg.connect(settings.database_url, row_factory=dict_row)

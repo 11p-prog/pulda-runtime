@@ -66,6 +66,16 @@ still rule-based and there is no live LLM provider or human-review UI.
   before creating an Event.
 - The API stores only the supplied summaries. It does not read ChatGPT
   transcripts, credentials, or account-wide conversation history by itself.
+- The scheduled adapter uses the canonical Notion queue page configured by
+  `NOTION_DAILY_ACTIVITY_QUEUE_PAGE_ID`. With
+  `AUTO_INGEST_DAILY_ACTIVITY_QUEUE=true`, the 22:40 Runtime cycle reads JSON
+  code blocks whose `kind` is `pulda-daily-activity` and registers them through
+  the same idempotent service. Repeated pulls do not duplicate Events or items.
+  The ten-minute offset prevents the Runtime pull from racing the 22:30
+  ChatGPT cutoff task; override it with `DAILY_ACTIVITY_PULL_HOUR` and
+  `DAILY_ACTIVITY_PULL_MINUTE` when needed.
+- `POST /integrations/notion/daily-activities/pull` performs the same pull on
+  demand and requires the daily activity Bearer token.
 
 ## Change and delete records
 

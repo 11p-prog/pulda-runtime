@@ -19,7 +19,10 @@ from .service import (
     capture_knowledge_source, get_knowledge_source, find_relevant_knowledge,
     capture_daily_activity, get_daily_activity,
 )
-from .connectors import sync_notion, sync_github, check_notion, check_github
+from .connectors import (
+    sync_notion, sync_github, check_notion, check_github,
+    pull_notion_daily_activities,
+)
 from .scheduler import start_scheduler
 from .config import settings
 
@@ -483,6 +486,14 @@ def api_health():
 @app.get("/integrations/notion/check")
 def integrations_notion_check():
     result = check_notion()
+    if not result["ok"]:
+        raise HTTPException(400, result)
+    return result
+
+@app.post("/integrations/notion/daily-activities/pull")
+def integrations_notion_daily_activities_pull(request: Request):
+    _require_daily_activity_token(request)
+    result = pull_notion_daily_activities()
     if not result["ok"]:
         raise HTTPException(400, result)
     return result

@@ -1,7 +1,8 @@
 import base64
+import json
 import requests
 from .config import settings
-from .service import audit, latest_review
+from .service import audit, latest_review, capture_daily_activity
 from .connector_client import connector_proxy, is_connector_available
 
 def check_notion() -> dict:
@@ -95,6 +96,84 @@ def sync_notion() -> dict:
     except Exception as e:
         audit("sync_notion", page_id, "failed", str(e))
         return {"ok": False, "error": str(e)}
+
+def _notion_request(method: str, path: str, json_body: dict | None = None):
+    use_connector = is_connector_available()
+    if use_connector:
+        return connector_proxy("notion", path, method=method, json_body=json_body)
+    if not settings.notion_token:
+        raise RuntimeError("Notion not connected: set up the Notion connector or NOTION_TOKEN")
+    return requests.request(
+        method,
+        f"https://api.notion.com{path}",
+        headers={
+            "Authorization": f"Bearer {settings.notion_token}",
+            "Notion-Version": "2022-06-28",
+            "Content-Type": "application/json",
+        },
+        json=json_body,
+        timeout=20,
+    )
+
+def _block_plain_text(block: dict) -> str:
+    block_type = block.get("type", "")
+    rich_text = (block.get(block_type) or {}).get("rich_text", [])
+    return "".join(part.get("plain_text", "") for part in rich_text).strip()
+
+def pull_notion_daily_activities() -> dict:
+    """Register privacy-reviewed envelopes from the canonical Notion queue.
+
+    Queue blocks stay append-only. Runtime external keys and item hashes make
+    retries safe and provide acknowledgement through the returned Event ID.
+    """
+    page_id = settings.notion_daily_activity_queue_page_id
+    if not page_id:
+        return {"ok": False, "error": "NOTION_DAILY_ACTIVITY_QUEUE_PAGE_ID missing"}
+
+    processed = []
+    ignored = 0
+    cursor = None
+    try:
+        while True:
+            suffix = "?page_size=100"
+            if cursor:
+                from urllib.parse import quote
+                suffix += f"&start_cursor={quote(cursor)}"
+            response = _notion_request("GET", f"/v1/blocks/{page_id}/children{suffix}")
+            response.raise_for_status()
+            body = response.json()
+            for block in body.get("results", []):
+                raw = _block_plain_text(block)
+                if not raw.startswith("{"):
+                    continue
+                try:
+                    envelope = json.loads(raw)
+                except json.JSONDecodeError:
+                    ignored += 1
+                    continue
+                if envelope.get("kind") != "pulda-daily-activity":
+                    continue
+                payload = {key: envelope.get(key) for key in (
+                    "activity_date", "source_channel", "external_key",
+                    "source_coverage", "access_gaps", "privacy_reviewed", "items",
+                )}
+                result = capture_daily_activity(**payload)
+                processed.append({
+                    "external_key": payload["external_key"],
+                    "event_id": result["event"]["id"],
+                    "batch_id": result["batch"]["id"],
+                    "created": result["created"],
+                    "added_count": result["added_count"],
+                })
+            if not body.get("has_more"):
+                break
+            cursor = body.get("next_cursor")
+
+        audit("pull_notion_daily_activities", page_id, "success", f"processed={len(processed)}")
+        return {"ok": True, "processed": processed, "ignored": ignored}
+    except Exception as e:
+        audit("pull_notion_daily_activities", page_id, "failed", str(e))
+        return {"ok": False, "processed": processed, "ignored": ignored, "error": str(e)}
 
 def _github_request(method: str, path: str, use_connector: bool, json_body: dict | None = None,
                      params: dict | None = None):

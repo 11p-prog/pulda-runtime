@@ -218,6 +218,57 @@ def test_daily_activity_requires_privacy_review_and_configured_token():
     finally:
         object.__setattr__(settings, "daily_activity_ingest_token", "")
 
+def test_notion_queue_pull_registers_and_retries_idempotently(monkeypatch):
+    import json
+    import pulda.connectors as connectors
+    from pulda.config import settings
+
+    envelope = {
+        "kind": "pulda-daily-activity",
+        "activity_date": "2026-07-22",
+        "source_channel": "chatgpt",
+        "external_key": "chatgpt:primary:2026-07-22",
+        "source_coverage": "scheduled ChatGPT activity summary",
+        "access_gaps": "account-wide transcript access unavailable",
+        "privacy_reviewed": True,
+        "items": [{
+            "item_type": "work_result",
+            "project": "PRJ-PULDA-OS",
+            "summary": "Notion queue adapter test completed",
+            "source_ref": "CR-0015",
+            "review_state": "register",
+        }],
+    }
+
+    class FakeResponse:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "results": [{
+                    "type": "code",
+                    "code": {"rich_text": [{"plain_text": json.dumps(envelope)}]},
+                }],
+                "has_more": False,
+                "next_cursor": None,
+            }
+
+    monkeypatch.setattr(connectors, "_notion_request", lambda *args, **kwargs: FakeResponse())
+    object.__setattr__(settings, "notion_daily_activity_queue_page_id", "queue-page")
+    try:
+        first = connectors.pull_notion_daily_activities()
+        repeated = connectors.pull_notion_daily_activities()
+    finally:
+        object.__setattr__(settings, "notion_daily_activity_queue_page_id", "")
+
+    assert first["ok"] is True
+    assert first["processed"][0]["created"] is True
+    assert first["processed"][0]["added_count"] == 1
+    assert repeated["processed"][0]["created"] is False
+    assert repeated["processed"][0]["added_count"] == 0
+    assert repeated["processed"][0]["event_id"] == first["processed"][0]["event_id"]
+
 def test_first_contextual_knowledge_case_is_idempotent_and_retrievable():
     item = capture_knowledge_source(
         canonical_url="https://www.cio.com/article/4196592/example",

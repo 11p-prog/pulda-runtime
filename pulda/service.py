@@ -2,7 +2,7 @@ from datetime import datetime, date
 import json
 import hashlib
 from .timeutil import now_kst, today_kst, date_label
-from .db import connect
+from .db import connect, database_backend
 from .classifier import classify
 
 INTERPRETATION_FIELDS = {"role", "area", "kind", "urgency", "importance"}
@@ -970,5 +970,6 @@ def health():
         failures = conn.execute(
             "SELECT * FROM audit_log WHERE status='failed' ORDER BY created_at DESC LIMIT 5"
         ).fetchall()
-    return {"status": "ok" if not failures else "degraded", "events": event_count,
+    return {"status": "ok" if not failures else "degraded", "database_backend": database_backend(),
+            "events": event_count,
             "recent_failures": [dict(r) for r in failures]}

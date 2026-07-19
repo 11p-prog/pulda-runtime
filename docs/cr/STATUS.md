@@ -40,6 +40,7 @@ alone is insufficient. `Related Git Commit` must carry the real commit hash.
 | CR-0013 | Restore the First Living Loop | High | In Progress — rule-based loop implemented; actual AI/LLM not connected; Living Loop incomplete; user verification not performed (AI connection prerequisite) | ChatGPT | User | 2026-07-13 | 2026-07-16 |
 | CR-0014 | First Contextual Knowledge Case | High | Prepared locally — code/schema/API/docs/tests ready; remote commit and Runtime user verification pending | Codex | User | 2026-07-17 | 2026-07-17 |
 | CR-0015 | ChatGPT Daily Activity Capture | High | In Progress — direct ingest deployed and Event ID verified; Notion relay passes locally, deployment/reauthorization/end-to-end run pending | ChatGPT | User | 2026-07-18 | 2026-07-19 |
+| CR-0016 | Autoscale PostgreSQL Runtime Persistence | High | In Progress — dual backend passes locally; deployment and redeploy persistence proof pending | ChatGPT | User | 2026-07-19 | 2026-07-19 |
 
 ## RFCs open for discussion
 - RFC-0001 — AI Memory Structure

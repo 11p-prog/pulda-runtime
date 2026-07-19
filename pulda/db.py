@@ -1,4 +1,5 @@
 import sqlite3
+import re
 from pathlib import Path
 from contextlib import contextmanager
 from .config import settings
@@ -175,7 +176,10 @@ NEW_EVENT_COLUMNS = {
     "deleted_at": "TEXT",
 }
 
-def _migrate(conn: sqlite3.Connection) -> None:
+def database_backend() -> str:
+    return "postgresql" if settings.database_url else "sqlite"
+
+def _migrate_sqlite(conn: sqlite3.Connection) -> None:
     existing = {row[1] for row in conn.execute("PRAGMA table_info(events)").fetchall()}
     for column, col_type in NEW_EVENT_COLUMNS.items():
         if column not in existing:
@@ -189,14 +193,86 @@ def _migrate(conn: sqlite3.Connection) -> None:
     conn.execute("DROP TABLE IF EXISTS workspace_tabs")
 
 def init_db() -> None:
+    if settings.database_url:
+        _init_postgres()
+        return
     path = Path(settings.db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(path) as conn:
         conn.executescript(SCHEMA)
-        _migrate(conn)
+        _migrate_sqlite(conn)
+
+def _postgres_schema() -> str:
+    schema = SCHEMA.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "BIGSERIAL PRIMARY KEY")
+    schema = re.sub(r"\b(INTEGER)(\s+(?:NOT NULL\s+)?REFERENCES)", r"BIGINT\2", schema)
+    return schema
+
+def _init_postgres() -> None:
+    import psycopg
+    with psycopg.connect(settings.database_url) as conn:
+        # Autoscale can start multiple instances together. Serialize schema
+        # initialization inside PostgreSQL so concurrent boots cannot race.
+        conn.execute("SELECT pg_advisory_xact_lock(hashtext('pulda_runtime_schema_v1'))")
+        for statement in _postgres_schema().split(";"):
+            if statement.strip():
+                conn.execute(statement)
+        for column, col_type in NEW_EVENT_COLUMNS.items():
+            conn.execute(f"ALTER TABLE events ADD COLUMN IF NOT EXISTS {column} {col_type}")
+        conn.execute("ALTER TABLE reviews ADD COLUMN IF NOT EXISTS reflection TEXT")
+        conn.execute("DROP TABLE IF EXISTS workspace_tabs")
+
+def _postgres_sql(sql: str) -> str:
+    converted = sql.replace("?", "%s")
+    if re.match(r"^\s*INSERT\s+OR\s+IGNORE\s+INTO\b", converted, re.IGNORECASE):
+        converted = re.sub(
+            r"^\s*INSERT\s+OR\s+IGNORE\s+INTO\b", "INSERT INTO", converted,
+            count=1, flags=re.IGNORECASE,
+        ).rstrip() + " ON CONFLICT DO NOTHING"
+    return converted
+
+class _PostgresCursor:
+    def __init__(self, cursor, lastrowid=None, rowcount=None):
+        self._cursor = cursor
+        self.lastrowid = lastrowid
+        self.rowcount = cursor.rowcount if rowcount is None else rowcount
+
+    def fetchone(self):
+        return self._cursor.fetchone()
+
+    def fetchall(self):
+        return self._cursor.fetchall()
+
+class _PostgresConnection:
+    def __init__(self, connection):
+        self._connection = connection
+
+    def execute(self, sql: str, params=()):
+        converted = _postgres_sql(sql)
+        is_insert = bool(re.match(r"^\s*INSERT\b", converted, re.IGNORECASE))
+        if is_insert and "RETURNING" not in converted.upper():
+            converted = converted.rstrip() + " RETURNING id"
+            cursor = self._connection.execute(converted, params)
+            rowcount = cursor.rowcount
+            row = cursor.fetchone()
+            lastrowid = row["id"] if row else None
+            return _PostgresCursor(cursor, lastrowid=lastrowid, rowcount=rowcount)
+        return _PostgresCursor(self._connection.execute(converted, params))
 
 @contextmanager
 def connect():
+    if settings.database_url:
+        import psycopg
+        from psycopg.rows import dict_row
+        conn = psycopg.connect(settings.database_url, row_factory=dict_row)
+        try:
+            yield _PostgresConnection(conn)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+        return
     conn = sqlite3.connect(settings.db_path)
     conn.row_factory = sqlite3.Row
     try:

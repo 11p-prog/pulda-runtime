@@ -269,6 +269,26 @@ def test_notion_queue_pull_registers_and_retries_idempotently(monkeypatch):
     assert repeated["processed"][0]["added_count"] == 0
     assert repeated["processed"][0]["event_id"] == first["processed"][0]["event_id"]
 
+def test_postgres_schema_and_sql_compatibility_adapter():
+    from pulda.db import _postgres_schema, _postgres_sql, database_backend
+
+    schema = _postgres_schema()
+    assert "BIGSERIAL PRIMARY KEY" in schema
+    assert "AUTOINCREMENT" not in schema
+    assert "event_id BIGINT NOT NULL REFERENCES events(id)" in schema
+    assert database_backend() == "sqlite"
+
+    select_sql = _postgres_sql("SELECT * FROM events WHERE id=? AND status=?")
+    assert select_sql == "SELECT * FROM events WHERE id=%s AND status=%s"
+
+    ignore_sql = _postgres_sql(
+        "INSERT OR IGNORE INTO daily_activity_items(batch_id,item_key) VALUES(?,?)"
+    )
+    assert ignore_sql == (
+        "INSERT INTO daily_activity_items(batch_id,item_key) VALUES(%s,%s) "
+        "ON CONFLICT DO NOTHING"
+    )
+
 def test_first_contextual_knowledge_case_is_idempotent_and_retrievable():
     item = capture_knowledge_source(
         canonical_url="https://www.cio.com/article/4196592/example",

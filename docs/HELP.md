@@ -77,6 +77,17 @@ still rule-based and there is no live LLM provider or human-review UI.
 - `POST /integrations/notion/daily-activities/pull` performs the same pull on
   demand and requires the daily activity Bearer token.
 
+## Runtime database selection
+
+- Deployment uses PostgreSQL automatically when `DATABASE_URL` is present.
+- Local development and tests continue to use the SQLite file configured by
+  `PULDA_DB_PATH` when `DATABASE_URL` is absent.
+- `/api/health` reports `database_backend` so deployment evidence can confirm
+  which store is active without exposing connection credentials.
+- On Replit Autoscale, do not use the SQLite file as the operational source of
+  truth. A valid persistence proof creates an Event, redeploys, retrieves the
+  same Event ID, and replays the envelope without duplication.
+
 ## Change and delete records
 
 - Normal delete is a soft delete: the Event disappears from active lists but

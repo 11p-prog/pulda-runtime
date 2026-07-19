@@ -533,6 +533,36 @@ def test_home_has_no_tab_bar_single_context():
     ws = context_workspace("today", today_kst().isoformat())
     assert any(text in e["text"] for e in ws["events"])
 
+def test_home_default_is_selected_date_event_list_with_collapsed_filters():
+    from fastapi.testclient import TestClient
+    from pulda.app import app
+
+    client = TestClient(app)
+    event_text = f"날짜기준 이벤트 화면 {datetime.now().isoformat()}"
+    create_event(event_text)
+    response = client.get("/")
+    assert response.status_code == 200
+    assert 'id="event-workspace-title"' in response.text
+    assert "오늘의 운영" not in response.text
+    assert event_text in response.text
+    assert '<details class="group rounded-xl' in response.text
+    assert "변경 이력" in response.text
+
+def test_home_event_filter_applies_status_and_search_within_selected_date():
+    from fastapi.testclient import TestClient
+    from pulda.app import app
+
+    client = TestClient(app)
+    needle = f"필터검색-{datetime.now().timestamp()}"
+    event_id = create_event(needle)
+    update_status(event_id, "done")
+    matched = client.get("/", params={"status": "done", "q": needle})
+    assert matched.status_code == 200
+    assert needle in matched.text
+    excluded = client.get("/", params={"status": "doing", "q": needle})
+    assert excluded.status_code == 200
+    assert "이 날짜와 필터에 해당하는 이벤트가 없습니다." in excluded.text
+
 def test_projects_nav_lists_and_scopes_by_project():
     project_name = f"탭리버트테스트-{datetime.now().timestamp()}"
     create_event("프로젝트 전용 이벤트", source="manual", project=project_name)

@@ -142,8 +142,25 @@ def _month_grid(year: int, month: int, activity: dict[str, int], selected: str) 
         weeks.append(row)
     return weeks
 
+def _filter_home_events(events: list[dict], status: str | None, query: str | None) -> list[dict]:
+    """Filter the selected day's Event rows without changing the date context."""
+    normalized_query = (query or "").strip().casefold()
+    return [
+        event for event in events
+        if event.get("kind") == "event"
+        and (not status or status == "all" or event.get("status") == status)
+        and (not normalized_query or normalized_query in event.get("text", "").casefold())
+    ]
+
+
 @app.get("/", response_class=HTMLResponse)
-def index(request: Request, cal_date: str | None = None):
+def index(
+    request: Request,
+    cal_date: str | None = None,
+    status: str | None = None,
+    q: str | None = None,
+    group: str = "none",
+):
     """Home: the single Activity Feed (IA-0001/CR-0012, decided 2026-07-13,
     superseding the CR-0011 tab bar) — no central Event/Task/Goal/Project
     tabs to switch between. The only remaining context axis is the date
@@ -166,6 +183,8 @@ def index(request: Request, cal_date: str | None = None):
         notion_status = check_notion()
     except Exception as e:
         notion_status = {"ok": False, "error": str(e)}
+    display_events = _filter_home_events(workspace["recent"], status, q)
+    change_history = [entry for entry in workspace["recent"] if entry.get("kind") == "status_change"]
     return templates.TemplateResponse("index.html", {
         "request": request,
         "today": today_iso,
@@ -179,6 +198,9 @@ def index(request: Request, cal_date: str | None = None):
         "pinned": pinned,
         "events": workspace["events"],
         "events_grouped": workspace["events_grouped"],
+        "display_events": display_events,
+        "change_history": change_history,
+        "event_filter": {"status": status or "all", "q": q or "", "group": group},
         "plan": workspace["plan"],
         "recent_events": workspace["recent"],
         "review": review,

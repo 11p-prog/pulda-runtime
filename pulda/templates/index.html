@@ -152,6 +152,95 @@
 
     <div class="max-w-4xl mx-auto w-full px-10 py-10 pb-36 flex flex-col gap-14">
 
+      <!-- Screenshot recovery baseline (user decision, 2026-07-19): the
+           selected date's Event list is Home's default center workspace. -->
+      <section aria-labelledby="event-workspace-title" class="space-y-5">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <span class="material-symbols-outlined text-[18px] text-on-surface-variant/50">expand_more</span>
+            <h2 id="event-workspace-title" class="text-[14px] font-semibold text-primary">이벤트</h2>
+          </div>
+          <span class="text-[11px] font-semibold text-primary bg-primary/10 rounded-full px-3 py-1">{{ display_events|length }}건</span>
+        </div>
+
+        <details class="group rounded-xl bg-surface-container-lowest border border-outline-variant/10">
+          <summary class="list-none cursor-pointer flex items-center gap-2 px-4 py-3 text-[12px] text-on-surface-variant">
+            <span class="material-symbols-outlined text-[16px] transition-transform group-open:rotate-90">chevron_right</span>
+            <span class="font-semibold text-on-surface">필터</span>
+            <span class="text-on-surface-variant/55">· {{ selected_date }} · {{ status_labels[event_filter.status] if event_filter.status != 'all' else '전체 상태' }} · {{ display_events|length }}건</span>
+          </summary>
+          <form method="get" action="/" class="border-t border-outline-variant/10 px-4 py-4 space-y-4">
+            <input type="hidden" name="cal_date" value="{{ selected_date }}">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="w-12 text-[11px] text-on-surface-variant/55">상태</span>
+              {% for value, label in [('all','전체'),('inbox','수집됨'),('planned','계획됨'),('doing','진행중'),('done','완료'),('deferred','보류'),('dropped','중단')] %}
+              <label class="cursor-pointer">
+                <input class="peer sr-only" type="radio" name="status" value="{{ value }}" {{ 'checked' if event_filter.status == value }}>
+                <span class="inline-flex rounded-full px-3 py-1.5 text-[11px] text-on-surface-variant peer-checked:bg-primary peer-checked:text-on-primary hover:bg-surface-container-low">{{ label }}</span>
+              </label>
+              {% endfor %}
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <label for="event-search" class="w-12 text-[11px] text-on-surface-variant/55">검색</label>
+              <input id="event-search" name="q" value="{{ event_filter.q }}" placeholder="내용 검색" class="min-w-64 flex-1 rounded-lg border-outline-variant/20 bg-surface text-[12px] py-2">
+              <button class="rounded-lg bg-primary px-4 py-2 text-[11px] font-semibold text-on-primary">적용</button>
+              <a href="/?cal_date={{ selected_date }}" class="rounded-lg px-3 py-2 text-[11px] text-on-surface-variant hover:bg-surface-container-low">초기화</a>
+            </div>
+          </form>
+        </details>
+
+        <div class="divide-y divide-outline-variant/10">
+          {% for e in display_events %}
+          <details class="group">
+            <summary class="list-none cursor-pointer flex items-center gap-3 py-3 px-2 hover:bg-surface-container-low rounded-lg">
+              <span class="text-[10px] font-semibold px-2 py-1 rounded-full shrink-0 {% if e.status == 'done' %}bg-success-container text-success{% elif e.status == 'deferred' %}bg-warning-container text-warning{% elif e.status == 'doing' %}bg-primary/10 text-primary{% else %}bg-secondary-container text-on-secondary-container{% endif %}">{{ status_labels[e.status] }}</span>
+              <span class="min-w-0 flex-1 truncate text-[14px] text-on-surface">{{ e.text }}</span>
+              <span class="shrink-0 text-[11px] text-on-surface-variant/45">{{ e.created_at[11:16] if e.created_at|length > 11 else e.created_at }}</span>
+            </summary>
+            <div class="flex flex-wrap items-center gap-3 px-3 pb-3 pl-24 text-[11px] text-on-surface-variant/65">
+              <span>{{ e.role }} / {{ e.area }}{% if e.project %} · {{ e.project }}{% endif %}</span>
+              <form method="post" action="/status/{{ e.id }}" class="flex items-center gap-1">
+                <input type="hidden" name="redirect_date" value="{{ selected_date }}">
+                <select name="status" class="rounded-lg border-none bg-surface-container-low py-1 text-[11px]">{% for s in status_options %}<option value="{{ s }}" {{ 'selected' if s == e.status }}>{{ status_labels[s] }}</option>{% endfor %}</select>
+                <button class="px-2 font-medium text-primary">변경</button>
+              </form>
+              <details class="relative inline-block">
+                <summary class="list-none cursor-pointer text-error/80">삭제</summary>
+                <div class="absolute right-0 z-20 mt-1 w-48 space-y-1 rounded-lg border border-outline-variant/20 bg-surface-container p-2 shadow-lg">
+                  <p class="px-1 text-[11px]">정말 삭제하시겠습니까?</p>
+                  <form method="post" action="/events/{{ e.id }}/delete"><input type="hidden" name="redirect_date" value="{{ selected_date }}"><input type="hidden" name="mode" value="soft"><button class="w-full rounded px-1 py-1 text-left">숨김 삭제 (기록 보관)</button></form>
+                  <form method="post" action="/events/{{ e.id }}/delete"><input type="hidden" name="redirect_date" value="{{ selected_date }}"><input type="hidden" name="mode" value="hard"><button class="w-full rounded px-1 py-1 text-left text-error">완전 삭제</button></form>
+                </div>
+              </details>
+            </div>
+          </details>
+          {% else %}
+          <p class="py-10 text-center text-[13px] text-on-surface-variant/45">이 날짜와 필터에 해당하는 이벤트가 없습니다.</p>
+          {% endfor %}
+        </div>
+
+        <details class="group border-t border-outline-variant/20 pt-5">
+          <summary class="list-none cursor-pointer flex items-center justify-between py-2">
+            <span class="flex items-center gap-2 text-[13px] font-semibold text-primary"><span class="material-symbols-outlined text-[16px] transition-transform group-open:rotate-90">chevron_right</span>변경 이력</span>
+            <span class="text-[11px] font-semibold text-primary bg-primary/10 rounded-full px-3 py-1">{{ change_history|length }}건</span>
+          </summary>
+          <div class="mt-2 divide-y divide-outline-variant/10">
+            {% for e in change_history %}
+            <div class="flex items-center gap-3 px-3 py-2.5 text-on-surface-variant/65">
+              <span class="material-symbols-outlined text-[15px]">history</span>
+              <span class="min-w-0 flex-1 truncate text-[12px]">{{ e.text }} · {{ status_labels[e.from_status] }} → {{ status_labels[e.to_status] }}</span>
+              <span class="shrink-0 text-[10px]">{{ e.created_at }}</span>
+            </div>
+            {% else %}<p class="px-3 py-5 text-[12px] text-on-surface-variant/45">이 날짜의 변경 이력이 없습니다.</p>{% endfor %}
+          </div>
+        </details>
+      </section>
+
+      <!-- Superseded center workspace retained temporarily for regression
+           comparison; hidden until the screenshot baseline is verified. -->
+      {% if false %}
+      <div class="hidden" aria-hidden="true">
+
       <!-- Operational status hero (dashboard tiles, not a greeting/checklist).
            Home has one primary surface — the Activity Feed below — per
            IA-0001; there is no central Event/Task/Goal/Project tab to
@@ -458,6 +547,9 @@
         <p class="text-[14px] text-on-surface-variant/50">{{ '아직 생성된 리뷰가 없습니다. 위 버튼으로 생성해 보세요.' if is_today else '이 날짜에는 생성된 리뷰가 없습니다.' }}</p>
         {% endif %}
       </div>
+
+      </div>
+      {% endif %}
 
     </div>
   </main>

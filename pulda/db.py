@@ -213,8 +213,11 @@ NEW_EVENT_COLUMNS = {
     "legacy_status": "TEXT",
 }
 
+# Set to True in init_db() only when PostgreSQL connects successfully.
+_postgres_available: bool = False
+
 def database_backend() -> str:
-    return "postgresql" if settings.database_url else "sqlite"
+    return "postgresql" if _postgres_available else "sqlite"
 
 def _migrate_sqlite(conn: sqlite3.Connection) -> None:
     existing = {row[1] for row in conn.execute("PRAGMA table_info(events)").fetchall()}
@@ -236,9 +239,19 @@ def _migrate_sqlite(conn: sqlite3.Connection) -> None:
     )
 
 def init_db() -> None:
+    global _postgres_available
     if settings.database_url:
-        _init_postgres()
-        return
+        try:
+            _init_postgres()
+            _postgres_available = True
+            return
+        except Exception as exc:
+            import logging
+            logging.warning(
+                "PostgreSQL unreachable at startup (%s) — falling back to SQLite. "
+                "Switch to Reserved VM deployment for persistent PostgreSQL access.", exc
+            )
+            _postgres_available = False
     path = Path(settings.db_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(path) as conn:
@@ -252,7 +265,7 @@ def _postgres_schema() -> str:
 
 def _init_postgres() -> None:
     import psycopg
-    with psycopg.connect(settings.database_url) as conn:
+    with psycopg.connect(settings.database_url, connect_timeout=3) as conn:
         # Autoscale can start multiple instances together. Serialize schema
         # initialization inside PostgreSQL so concurrent boots cannot race.
         conn.execute("SELECT pg_advisory_xact_lock(hashtext('pulda_runtime_schema_v1'))")
@@ -311,10 +324,10 @@ class _PostgresConnection:
 
 @contextmanager
 def connect():
-    if settings.database_url:
+    if _postgres_available:
         import psycopg
         from psycopg.rows import dict_row
-        conn = psycopg.connect(settings.database_url, row_factory=dict_row)
+        conn = psycopg.connect(settings.database_url, connect_timeout=3, row_factory=dict_row)
         try:
             yield _PostgresConnection(conn)
             conn.commit()

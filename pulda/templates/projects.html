@@ -48,7 +48,7 @@
       </div>
     </div>
 
-    <!-- Main navigation (IA-0001) -->
+    <p class="px-4 pb-2 text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant/45">즐겨찾기</p>
     <div class="space-y-1">
       <a class="flex items-center gap-3 px-4 py-3 {{ 'bg-secondary-container text-on-secondary-container' if page == 'home' else 'text-on-surface-variant hover:bg-surface-container-low transition-colors' }} rounded-xl text-[13px] font-medium" href="/">
         <span class="material-symbols-outlined">target</span> 오늘
@@ -56,18 +56,6 @@
       <a class="flex items-center gap-3 px-4 py-3 {{ 'bg-secondary-container text-on-secondary-container' if page == 'projects' else 'text-on-surface-variant hover:bg-surface-container-low transition-colors' }} rounded-xl text-[13px] font-medium" href="/projects">
         <span class="material-symbols-outlined">folder_open</span> 프로젝트
       </a>
-      <span class="flex items-center gap-3 px-4 py-3 text-on-surface-variant/40 rounded-xl text-[13px] font-medium cursor-not-allowed" title="다음 단계에서 제공됩니다">
-        <span class="material-symbols-outlined">autorenew</span> 루틴 <span class="text-[10px]">(준비중)</span>
-      </span>
-      <span class="flex items-center gap-3 px-4 py-3 text-on-surface-variant/40 rounded-xl text-[13px] font-medium cursor-not-allowed" title="다음 단계에서 제공됩니다">
-        <span class="material-symbols-outlined">school</span> 지식 <span class="text-[10px]">(준비중)</span>
-      </span>
-      <span class="flex items-center gap-3 px-4 py-3 text-on-surface-variant/40 rounded-xl text-[13px] font-medium cursor-not-allowed" title="다음 단계에서 제공됩니다">
-        <span class="material-symbols-outlined">inventory_2</span> 보관함 <span class="text-[10px]">(준비중)</span>
-      </span>
-      <span class="flex items-center gap-3 px-4 py-3 text-on-surface-variant/40 rounded-xl text-[13px] font-medium cursor-not-allowed" title="다음 단계에서 제공됩니다">
-        <span class="material-symbols-outlined">settings</span> 설정 <span class="text-[10px]">(준비중)</span>
-      </span>
     </div>
 
     <div class="mt-auto px-4 flex items-center gap-3 py-4 border-t border-outline-variant/10">
@@ -86,7 +74,11 @@
   <!-- Main -->
   <main class="ml-64 flex-1 flex flex-col relative">
     <header class="flex justify-between items-center w-full px-10 py-6 sticky top-0 z-40 bg-surface-bright/80 glass-blur">
-      <span class="text-[11px] font-semibold text-primary tracking-widest uppercase">프로젝트</span>
+      <nav aria-label="Breadcrumb" class="flex items-center gap-2 text-[11px]">
+        <a href="/?view=work" class="text-on-surface-variant/60 hover:text-primary">업무</a>
+        <span class="text-on-surface-variant/40">/</span>
+        <span class="font-semibold text-primary">프로젝트</span>
+      </nav>
     </header>
 
     <div class="max-w-4xl mx-auto w-full px-10 py-10 pb-24 flex flex-col gap-6">

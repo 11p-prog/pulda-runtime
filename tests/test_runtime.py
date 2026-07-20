@@ -641,9 +641,57 @@ def test_workspace_picker_exposes_purpose_views_not_data_model_tabs():
     from pulda.app import app
 
     client = TestClient(app)
-    response = client.get("/")
+    home = client.get("/")
+    assert home.status_code == 200
+    assert 'aria-label="새 화면 추가"' in home.text
+    assert 'href="/?view=new"' in home.text
+    assert 'name="view_key"' not in home.text
+
+    response = client.get("/?view=new")
     assert response.status_code == 200
+    assert "NEW" in response.text
+    assert "어떤 화면을 열까요?" in response.text
     assert "생활" in response.text
     assert "커뮤니티" in response.text
     assert 'name="view_key"' in response.text
     assert "Event / Task / Goal / Project" not in response.text
+
+
+def test_new_workspace_is_full_page_and_add_preserves_selected_date():
+    from fastapi.testclient import TestClient
+    from pulda.app import app
+
+    client = TestClient(app)
+    picker = client.get("/?view=new&cal_date=2026-07-19")
+    assert picker.status_code == 200
+    assert 'aria-label="작업공간 탭"' in picker.text
+    tab_bar = picker.text.split('aria-label="작업공간 탭"', 1)[1].split("</div>", 1)[0]
+    assert "overflow-x-auto" not in tab_bar
+    assert 'name="redirect_date" value="2026-07-19"' in picker.text
+
+    added = client.post(
+        "/workspace-tabs",
+        data={"view_key": "life", "redirect_date": "2026-07-19"},
+        follow_redirects=False,
+    )
+    assert added.status_code == 303
+    assert added.headers["location"] == "/?view=life&cal_date=2026-07-19"
+
+
+def test_sidebar_is_favorites_and_workspace_depth_uses_breadcrumbs():
+    from fastapi.testclient import TestClient
+    from pulda.app import app
+
+    client = TestClient(app)
+    life = client.get("/?view=life")
+    assert life.status_code == 200
+    assert "즐겨찾기" in life.text
+    assert 'aria-label="Breadcrumb"' in life.text
+    assert 'href="/?view=new"' in life.text
+    assert "(준비중)" not in life.text
+
+    projects = client.get("/projects")
+    assert projects.status_code == 200
+    assert "즐겨찾기" in projects.text
+    assert 'aria-label="Breadcrumb"' in projects.text
+    assert 'href="/?view=work"' in projects.text

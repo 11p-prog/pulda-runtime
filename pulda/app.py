@@ -200,7 +200,7 @@ def index(
         year, month = today_kst().year, today_kst().month
         selected_date = today_iso
         pinned = False
-    if view not in WORKSPACE_VIEWS:
+    if view not in WORKSPACE_VIEWS and view != "new":
         view = "home"
     workspace = context_workspace("today", selected_date)
     review = review_for_date(selected_date)
@@ -357,12 +357,19 @@ def bulk_status(event_ids: list[int] = Form(...), status: str = Form(...), redir
     return RedirectResponse(dest, status_code=303)
 
 @app.post("/workspace-tabs")
-def workspace_tab_add(view_key: str = Form(...)):
+def workspace_tab_add(view_key: str = Form(...), redirect_date: str | None = Form(None)):
     try:
         add_workspace_tab(view_key)
     except ValueError as exc:
         raise HTTPException(400, str(exc))
-    return RedirectResponse(f"/?view={view_key}", status_code=303)
+    suffix = ""
+    if redirect_date:
+        try:
+            date.fromisoformat(redirect_date)
+        except ValueError as exc:
+            raise HTTPException(400, "invalid redirect date") from exc
+        suffix = f"&cal_date={redirect_date}"
+    return RedirectResponse(f"/?view={view_key}{suffix}", status_code=303)
 
 @app.post("/workspace-tabs/{view_key}/remove")
 def workspace_tab_remove(view_key: str):

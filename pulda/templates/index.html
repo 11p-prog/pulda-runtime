@@ -88,9 +88,10 @@
       </div>
     </div>
 
-    <!-- Main navigation (IA-0001): users navigate by purpose, not by
-         database entity type. No central Event/Task/Goal/Project tabs —
-         Home is a single Activity Feed; Projects is its own destination. -->
+    <!-- Favorites are shortcuts into the workspace hierarchy, not a second
+         navigation model. The complete implemented-screen catalog lives in
+         the NEW tab. -->
+    <p class="px-4 pb-2 text-[10px] font-semibold uppercase tracking-widest text-on-surface-variant/45">즐겨찾기</p>
     <div class="space-y-1">
       <a class="flex items-center gap-3 px-4 py-3 {{ 'bg-secondary-container text-on-secondary-container' if page == 'home' else 'text-on-surface-variant hover:bg-surface-container-low transition-colors' }} rounded-xl text-[13px] font-medium" href="/">
         <span class="material-symbols-outlined">target</span> 오늘
@@ -98,18 +99,6 @@
       <a class="flex items-center gap-3 px-4 py-3 {{ 'bg-secondary-container text-on-secondary-container' if page == 'projects' else 'text-on-surface-variant hover:bg-surface-container-low transition-colors' }} rounded-xl text-[13px] font-medium" href="/projects">
         <span class="material-symbols-outlined">folder_open</span> 프로젝트
       </a>
-      <span class="flex items-center gap-3 px-4 py-3 text-on-surface-variant/40 rounded-xl text-[13px] font-medium cursor-not-allowed" title="다음 단계에서 제공됩니다">
-        <span class="material-symbols-outlined">autorenew</span> 루틴 <span class="text-[10px]">(준비중)</span>
-      </span>
-      <span class="flex items-center gap-3 px-4 py-3 text-on-surface-variant/40 rounded-xl text-[13px] font-medium cursor-not-allowed" title="다음 단계에서 제공됩니다">
-        <span class="material-symbols-outlined">school</span> 지식 <span class="text-[10px]">(준비중)</span>
-      </span>
-      <span class="flex items-center gap-3 px-4 py-3 text-on-surface-variant/40 rounded-xl text-[13px] font-medium cursor-not-allowed" title="다음 단계에서 제공됩니다">
-        <span class="material-symbols-outlined">inventory_2</span> 보관함 <span class="text-[10px]">(준비중)</span>
-      </span>
-      <span class="flex items-center gap-3 px-4 py-3 text-on-surface-variant/40 rounded-xl text-[13px] font-medium cursor-not-allowed" title="다음 단계에서 제공됩니다">
-        <span class="material-symbols-outlined">settings</span> 설정 <span class="text-[10px]">(준비중)</span>
-      </span>
     </div>
 
     <!-- In-page quick links (jump within the Home feed — not separate nav
@@ -150,32 +139,53 @@
       </div>
     </header>
 
-    <div class="sticky top-[64px] z-30 flex items-end gap-1 overflow-x-auto border-b border-outline-variant/10 bg-surface-bright/90 px-10 pt-2 glass-blur">
+    <div aria-label="작업공간 탭" class="sticky top-[64px] z-30 flex flex-wrap items-end gap-1 border-b border-outline-variant/10 bg-surface-bright/90 px-10 pt-2 glass-blur">
       {% for tab in workspace_tabs %}
       <div class="group flex items-center gap-1 rounded-t-xl border-b-2 px-3 py-2 text-[12px] {{ 'border-primary bg-white text-primary' if tab.view_key == active_view else 'border-transparent text-on-surface-variant/65 hover:bg-surface-container-low' }}">
         <a href="/?view={{ tab.view_key }}{% if selected_date != today %}&cal_date={{ selected_date }}{% endif %}" class="flex items-center gap-2 whitespace-nowrap"><span class="material-symbols-outlined text-[16px]">{{ tab.icon }}</span>{{ tab.label }}</a>
         {% if tab.removable %}<form method="post" action="/workspace-tabs/{{ tab.view_key }}/remove"><button aria-label="{{ tab.label }} 닫기" class="ml-1 rounded-full text-on-surface-variant/40 hover:text-error"><span class="material-symbols-outlined text-[14px]">close</span></button></form>{% endif %}
       </div>
       {% endfor %}
-      <details class="relative mb-1">
-        <summary class="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-lg text-on-surface-variant/60 hover:bg-primary/10 hover:text-primary"><span class="material-symbols-outlined text-[18px]">add</span></summary>
-        <div class="fixed left-[300px] top-[116px] z-50 grid w-[420px] grid-cols-2 gap-2 rounded-2xl border border-outline-variant/15 bg-white p-3 shadow-xl">
-          {% for option in workspace_view_options %}
-          <form method="post" action="/workspace-tabs">
-            <input type="hidden" name="view_key" value="{{ option.key }}">
-            <button class="flex min-h-24 w-full flex-col items-start rounded-xl border border-outline-variant/10 p-4 text-left hover:border-primary/30 hover:bg-primary/5">
-              <span class="material-symbols-outlined mb-2 text-primary">{{ option.icon }}</span><strong class="text-[13px]">{{ option.label }}</strong>
-              <span class="mt-1 text-[11px] text-on-surface-variant/60">{{ {'life':'일상·가족·취미·건강·성장 흐름','work':'프로젝트와 WBS','community':'종교·단체·모임 활동','stats':'기간별 리듬·부하·공백','settings':'화면·반복·연결 기본값'}[option.key] }}</span>
-            </button>
-          </form>
-          {% else %}<p class="col-span-2 p-4 text-[12px] text-on-surface-variant/50">추가할 수 있는 모든 화면이 열려 있습니다.</p>{% endfor %}
-        </div>
-      </details>
+      {% if active_view == 'new' %}
+      <div class="group flex items-center gap-1 rounded-t-xl border-b-2 border-primary bg-white px-3 py-2 text-[12px] text-primary">
+        <span class="flex items-center gap-2 whitespace-nowrap"><span class="material-symbols-outlined text-[16px]">add</span>NEW</span>
+        <a href="/{% if selected_date != today %}?cal_date={{ selected_date }}{% endif %}" aria-label="NEW 닫기" class="ml-1 rounded-full text-on-surface-variant/40 hover:text-error"><span class="material-symbols-outlined text-[14px]">close</span></a>
+      </div>
+      {% else %}
+      <a href="/?view=new{% if selected_date != today %}&cal_date={{ selected_date }}{% endif %}" aria-label="새 화면 추가" class="mb-1 flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant/60 hover:bg-primary/10 hover:text-primary"><span class="material-symbols-outlined text-[18px]">add</span></a>
+      {% endif %}
     </div>
 
     <div class="max-w-4xl mx-auto w-full px-10 py-10 pb-36 flex flex-col gap-14">
 
-      {% if active_view == 'home' %}
+      {% if active_view == 'new' %}
+      <section class="space-y-8" aria-labelledby="new-workspace-title">
+        <div>
+          <p class="text-[11px] uppercase tracking-widest text-primary">New workspace</p>
+          <h2 id="new-workspace-title" class="mt-2 text-2xl font-semibold">어떤 화면을 열까요?</h2>
+          <p class="mt-2 text-sm text-on-surface-variant/60">목적과 대표 기능을 확인한 뒤 화면을 선택하세요.</p>
+        </div>
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {% for option in workspace_view_options %}
+          <form method="post" action="/workspace-tabs">
+            <input type="hidden" name="view_key" value="{{ option.key }}">
+            <input type="hidden" name="redirect_date" value="{{ selected_date }}">
+            <button class="flex min-h-40 w-full flex-col items-start rounded-2xl border border-outline-variant/15 bg-white p-6 text-left shadow-sm transition hover:border-primary/40 hover:bg-primary/5 hover:shadow-md">
+              <span class="material-symbols-outlined mb-5 text-3xl text-primary">{{ option.icon }}</span>
+              <strong class="text-lg">{{ option.label }}</strong>
+              <span class="mt-2 text-sm leading-6 text-on-surface-variant/60">{{ {'life':'일상·가족·취미·건강·성장 흐름','work':'프로젝트와 WBS','community':'종교·단체·모임 활동','stats':'기간별 리듬·부하·공백','settings':'화면·반복·연결 기본값'}[option.key] }}</span>
+            </button>
+          </form>
+          {% else %}
+          <div class="rounded-2xl border border-outline-variant/15 bg-white p-8 md:col-span-2">
+            <p class="font-semibold">모든 화면이 열려 있습니다.</p>
+            <p class="mt-2 text-sm text-on-surface-variant/60">상단 탭에서 원하는 화면을 선택하거나 불필요한 탭을 닫으세요.</p>
+          </div>
+          {% endfor %}
+        </div>
+      </section>
+
+      {% elif active_view == 'home' %}
 
       <!-- Screenshot recovery baseline (user decision, 2026-07-19): the
            selected date's Event list is Home's default center workspace. -->
@@ -582,7 +592,12 @@
 
       {% else %}
       <section class="space-y-6" aria-labelledby="workspace-view-title">
-        <div><p class="text-[11px] uppercase tracking-widest text-primary">Workspace</p><h2 id="workspace-view-title" class="mt-2 text-2xl font-semibold">{{ {'life':'생활','work':'업무','community':'커뮤니티','stats':'통계','settings':'설정'}[active_view] }}</h2></div>
+        <nav aria-label="Breadcrumb" class="flex items-center gap-2 text-[11px] text-on-surface-variant/55">
+          <a href="/?view=new{% if selected_date != today %}&cal_date={{ selected_date }}{% endif %}" class="hover:text-primary">전체 화면</a>
+          <span>/</span>
+          <span class="font-semibold text-primary">{{ {'life':'생활','work':'업무','community':'커뮤니티','stats':'통계','settings':'설정'}[active_view] }}</span>
+        </nav>
+        <div><h2 id="workspace-view-title" class="text-2xl font-semibold">{{ {'life':'생활','work':'업무','community':'커뮤니티','stats':'통계','settings':'설정'}[active_view] }}</h2></div>
         {% if active_view == 'life' %}
         <div class="grid grid-cols-2 gap-4">{% for title, desc in [('생활·회복','일상과 취미의 흐름'),('가족','가족 일정과 기록'),('관계·공동체','사람과 공동체 활동'),('성장·건강','학습·운동·자기계발')] %}<div class="rounded-2xl border border-outline-variant/10 bg-white p-6"><h3 class="font-semibold">{{ title }}</h3><p class="mt-2 text-[12px] text-on-surface-variant/60">{{ desc }}</p></div>{% endfor %}</div>
         {% elif active_view == 'work' %}<div class="rounded-2xl bg-white p-8"><p class="text-sm text-on-surface-variant">Project Dashboard / Portfolio WBS</p><a href="/projects" class="mt-4 inline-block text-sm font-semibold text-primary">프로젝트 화면 열기 →</a></div>

@@ -19,10 +19,17 @@ future.
 
 ## Central workspace
 
-Home is the permanent date-based Event tab. Use **+** to discover and open
-Life, Work, Community, Statistics, or Settings. Closing a tab closes only the
-view and never deletes Event data. The initial picker includes descriptions so
-new users do not need to memorize screen names.
+Home is the permanent date-based Event tab. **+** opens a temporary **NEW** tab
+whose entire center workspace presents descriptive cards for Life, Work,
+Community, Statistics, and Settings. Selecting a card adds that view as a tab.
+Closing a tab closes only the view and never deletes Event data. The tab strip
+wraps without creating its own horizontal scrollbar.
+
+The left panel is a favorites area for frequently used destinations, not a
+separate screen hierarchy. Today remains the permanent Home context, while
+Projects is a shortcut into **Work > Projects**. Inside a screen, breadcrumbs
+move between depths. Screens that are not implemented are not shown as fake
+NEW-tab choices or disabled favorites.
 
 This is the living user-facing guide for behavior that exists in the current
 Runtime. Update it in the same Git change whenever visible behavior or a user

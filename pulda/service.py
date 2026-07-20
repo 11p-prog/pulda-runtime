@@ -1,4 +1,5 @@
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
+import calendar
 import json
 import hashlib
 from .timeutil import now_kst, today_kst, date_label
@@ -381,7 +382,19 @@ def audit(action: str, target: str | None, status: str, detail: str = "") -> Non
             (action, target, status, detail, now),
         )
 
-def create_event(text: str, source: str = "manual", role_override: str | None = None, **extra) -> int:
+EVENT_STATUSES = {"recorded", "doing", "done", "deferred", "dropped"}
+OCCURRENCE_STATUSES = {"scheduled", "recorded", "skipped", "cancelled"}
+WORKSPACE_VIEWS = {
+    "home": ("오늘", "event"),
+    "life": ("생활", "favorite"),
+    "work": ("업무", "work"),
+    "community": ("커뮤니티", "groups"),
+    "stats": ("통계", "monitoring"),
+    "settings": ("설정", "settings"),
+}
+
+
+def create_event(text: str, source: str = "manual_ui", role_override: str | None = None, **extra) -> int:
     c = classify(text)
     role = role_override or c.role
     now = now_kst().isoformat(timespec="seconds")
@@ -389,16 +402,17 @@ def create_event(text: str, source: str = "manual", role_override: str | None = 
         "project": None, "goal": None, "financial_impact": None,
         "family_impact": None, "blocked_by": None, "defer_reason": None,
         "next_review_at": None, "notion_page_id": None,
+        "occurred_on": today_kst().isoformat(),
     }
     extra_fields.update({k: v for k, v in extra.items() if k in extra_fields})
     with connect() as conn:
         cur = conn.execute(
             """INSERT INTO events
-            (text,source,role,area,kind,urgency,importance,status,scheduled_at,due_date,
+            (text,source,role,area,kind,urgency,importance,status,captured_at,occurred_on,scheduled_at,due_date,
              project,goal,financial_impact,family_impact,blocked_by,defer_reason,next_review_at,notion_page_id,
              created_at,updated_at)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (text,source,role,c.area,c.kind,c.urgency,c.importance,c.status,
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (text,source,role,c.area,c.kind,c.urgency,c.importance,"recorded",now,extra_fields["occurred_on"],
              c.scheduled_at,c.due_date,
              extra_fields["project"], extra_fields["goal"], extra_fields["financial_impact"],
              extra_fields["family_impact"], extra_fields["blocked_by"], extra_fields["defer_reason"],
@@ -423,6 +437,10 @@ def delete_event(event_id: int) -> None:
     (e.g. a double-tapped submit button) where no meaningful history exists
     yet and a permanent record would just be noise."""
     with connect() as conn:
+        series_rows = conn.execute("SELECT id FROM recurrence_series WHERE event_id=?", (event_id,)).fetchall()
+        for series in series_rows:
+            conn.execute("DELETE FROM recurrence_occurrences WHERE series_id=?", (series["id"],))
+        conn.execute("DELETE FROM recurrence_series WHERE event_id=?", (event_id,))
         batch = conn.execute(
             "SELECT id FROM daily_activity_batches WHERE event_id=?", (event_id,)
         ).fetchone()
@@ -455,7 +473,7 @@ def soft_delete_event(event_id: int) -> None:
 PATCHABLE_FIELDS = {
     "status", "role", "area", "kind", "urgency", "importance", "due_date",
     "scheduled_at", "project", "goal", "financial_impact", "family_impact",
-    "blocked_by", "defer_reason", "next_review_at", "notion_page_id",
+    "blocked_by", "defer_reason", "next_review_at", "notion_page_id", "occurred_on",
 }
 
 def update_event(event_id: int, **fields) -> dict:
@@ -465,8 +483,7 @@ def update_event(event_id: int, **fields) -> dict:
     if not updates:
         raise ValueError("no valid fields to update")
     if "status" in updates:
-        allowed = {"inbox","planned","doing","done","deferred","dropped"}
-        if updates["status"] not in allowed:
+        if updates["status"] not in EVENT_STATUSES:
             raise ValueError("invalid status")
     now = now_kst().isoformat(timespec="seconds")
     set_clause = ", ".join(f"{k}=?" for k in updates) + ", updated_at=?"
@@ -500,8 +517,7 @@ def list_events(status: str | None = None, limit: int = 100):
         return [dict(r) for r in conn.execute(q, params).fetchall()]
 
 def update_status(event_id: int, status: str) -> None:
-    allowed = {"inbox","planned","doing","done","deferred","dropped"}
-    if status not in allowed:
+    if status not in EVENT_STATUSES:
         raise ValueError("invalid status")
     event = get_event(event_id)
     if not event:
@@ -512,6 +528,139 @@ def update_status(event_id: int, status: str) -> None:
     audit("update_status", str(event_id), "success", status)
     if event["status"] != status:
         record_status_change(event_id, event["text"], event["status"], status, now)
+
+
+def bulk_update_status(event_ids: list[int], status: str) -> dict:
+    if status not in EVENT_STATUSES:
+        raise ValueError("invalid status")
+    unique_ids = list(dict.fromkeys(event_ids))
+    if not unique_ids:
+        raise ValueError("no events selected")
+    changed = 0
+    for event_id in unique_ids:
+        event = get_event(event_id)
+        if not event or event.get("deleted_at"):
+            continue
+        if event["status"] != status:
+            update_status(event_id, status)
+            changed += 1
+    audit("bulk_update_status", ",".join(map(str, unique_ids)), "success", f"status={status};changed={changed}")
+    return {"selected_count": len(unique_ids), "changed_count": changed, "status": status}
+
+
+def list_workspace_tabs() -> list[dict]:
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT view_key,label,icon,removable,sort_order FROM workspace_tabs ORDER BY sort_order,id"
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def add_workspace_tab(view_key: str) -> dict:
+    if view_key not in WORKSPACE_VIEWS:
+        raise ValueError("unknown workspace view")
+    label, icon = WORKSPACE_VIEWS[view_key]
+    now = now_kst().isoformat(timespec="seconds")
+    with connect() as conn:
+        existing = conn.execute("SELECT * FROM workspace_tabs WHERE view_key=?", (view_key,)).fetchone()
+        if existing:
+            return dict(existing)
+        max_order = conn.execute("SELECT COALESCE(MAX(sort_order),0) m FROM workspace_tabs").fetchone()["m"]
+        cur = conn.execute(
+            "INSERT INTO workspace_tabs(view_key,label,icon,removable,sort_order,created_at) VALUES(?,?,?,?,?,?)",
+            (view_key, label, icon, 0 if view_key == "home" else 1, max_order + 1, now),
+        )
+        row = conn.execute("SELECT * FROM workspace_tabs WHERE id=?", (cur.lastrowid,)).fetchone()
+    audit("add_workspace_tab", view_key, "success", label)
+    return dict(row)
+
+
+def remove_workspace_tab(view_key: str) -> None:
+    if view_key == "home":
+        raise ValueError("home tab cannot be removed")
+    with connect() as conn:
+        conn.execute("DELETE FROM workspace_tabs WHERE view_key=?", (view_key,))
+    audit("remove_workspace_tab", view_key, "success", "")
+
+
+def create_recurrence_series(event_id: int, frequency: str, starts_on: str, interval_value: int = 1,
+                             ends_on: str | None = None, timezone: str = "Asia/Seoul") -> dict:
+    if frequency not in {"daily", "weekly", "monthly", "yearly"}:
+        raise ValueError("invalid recurrence frequency")
+    date.fromisoformat(starts_on)
+    if ends_on:
+        date.fromisoformat(ends_on)
+    if interval_value < 1:
+        raise ValueError("interval_value must be positive")
+    if not get_event(event_id):
+        raise ValueError("event not found")
+    now = now_kst().isoformat(timespec="seconds")
+    with connect() as conn:
+        cur = conn.execute(
+            """INSERT INTO recurrence_series
+            (event_id,frequency,interval_value,starts_on,ends_on,timezone,status,created_at,updated_at)
+            VALUES(?,?,?,?,?,?,'active',?,?)""",
+            (event_id, frequency, interval_value, starts_on, ends_on, timezone, now, now),
+        )
+        row = conn.execute("SELECT * FROM recurrence_series WHERE id=?", (cur.lastrowid,)).fetchone()
+    return dict(row)
+
+
+def _advance_recurrence(current: date, frequency: str, interval_value: int) -> date:
+    if frequency == "daily":
+        return current + timedelta(days=interval_value)
+    if frequency == "weekly":
+        return current + timedelta(weeks=interval_value)
+    months = interval_value if frequency == "monthly" else 12 * interval_value
+    month_index = current.year * 12 + current.month - 1 + months
+    year, month0 = divmod(month_index, 12)
+    month = month0 + 1
+    day = min(current.day, calendar.monthrange(year, month)[1])
+    return date(year, month, day)
+
+
+def recurrence_dates(series_id: int, window_start: str, window_end: str) -> list[str]:
+    start, end = date.fromisoformat(window_start), date.fromisoformat(window_end)
+    with connect() as conn:
+        series = conn.execute("SELECT * FROM recurrence_series WHERE id=?", (series_id,)).fetchone()
+    if not series or series["status"] != "active":
+        return []
+    current = date.fromisoformat(series["starts_on"])
+    series_end = date.fromisoformat(series["ends_on"]) if series["ends_on"] else end
+    dates: list[str] = []
+    while current <= min(end, series_end):
+        if current >= start:
+            dates.append(current.isoformat())
+        current = _advance_recurrence(current, series["frequency"], series["interval_value"])
+    return dates
+
+
+def set_occurrence_status(series_id: int, occurrence_date: str, status: str, note: str | None = None) -> dict:
+    if status not in OCCURRENCE_STATUSES:
+        raise ValueError("invalid occurrence status")
+    date.fromisoformat(occurrence_date)
+    now = now_kst().isoformat(timespec="seconds")
+    with connect() as conn:
+        existing = conn.execute(
+            "SELECT id FROM recurrence_occurrences WHERE series_id=? AND occurrence_date=?",
+            (series_id, occurrence_date),
+        ).fetchone()
+        if existing:
+            conn.execute(
+                "UPDATE recurrence_occurrences SET status=?,exception_note=?,updated_at=? WHERE id=?",
+                (status, note, now, existing["id"]),
+            )
+            occurrence_id = existing["id"]
+        else:
+            cur = conn.execute(
+                """INSERT INTO recurrence_occurrences
+                (series_id,occurrence_date,status,exception_note,created_at,updated_at)
+                VALUES(?,?,?,?,?,?)""",
+                (series_id, occurrence_date, status, note, now, now),
+            )
+            occurrence_id = cur.lastrowid
+        row = conn.execute("SELECT * FROM recurrence_occurrences WHERE id=?", (occurrence_id,)).fetchone()
+    return dict(row)
 
 def record_status_change(event_id: int, event_text: str, from_status: str, to_status: str, changed_at: str | None = None) -> None:
     """Log a status transition so it shows up as its own entry in the
@@ -735,7 +884,7 @@ def operations_summary() -> dict:
     focus_count = len(today_plan())
     with connect() as conn:
         waiting = conn.execute(
-            "SELECT count(*) c FROM events WHERE deleted_at IS NULL AND status='inbox'"
+            "SELECT count(*) c FROM events WHERE deleted_at IS NULL AND status='recorded'"
         ).fetchone()["c"]
         blocked = conn.execute(
             "SELECT count(*) c FROM events WHERE deleted_at IS NULL AND blocked_by IS NOT NULL AND status NOT IN ('done','dropped')"
@@ -832,7 +981,7 @@ def context_events(ctx: str, limit: int = 500):
     if where:
         q += f" AND {where}"
         params.append(param)
-    q += " ORDER BY created_at DESC LIMIT ?"
+    q += " ORDER BY occurred_on DESC, captured_at DESC, created_at DESC LIMIT ?"
     params.append(limit)
     with connect() as conn:
         events = [dict(r) for r in conn.execute(q, params).fetchall()]
@@ -859,12 +1008,7 @@ def context_workspace(ctx: str, selected_date: str | None = None) -> dict:
     is_future = selected_date > today
     is_past = not is_today and not is_future
     all_events = context_events(ctx)
-    if is_future:
-        # Nothing has been created yet for a future date — its "day" is
-        # defined by what's *due* then, not by created_at.
-        day_events = [e for e in all_events if e["due_date"] == selected_date]
-    else:
-        day_events = [e for e in all_events if e["created_at"][:10] == selected_date]
+    day_events = [e for e in all_events if (e.get("occurred_on") or e["created_at"][:10]) == selected_date]
     open_events = [e for e in all_events if e["status"] not in ("done", "dropped")]
     completed = [e for e in all_events if e["status"] == "done" and e["updated_at"][:10] == selected_date]
 
@@ -900,7 +1044,7 @@ def context_workspace(ctx: str, selected_date: str | None = None) -> dict:
             key=lambda e: (e["next_review_at"] or "9999-99-99", e["updated_at"]),
         )
         blocked = [e for e in open_events if e["blocked_by"]]
-        waiting = [e for e in all_events if e["status"] == "inbox"]
+        waiting = [e for e in all_events if e["status"] == "recorded"]
         events = sorted(
             [dict(e, kind="event") for e in all_events] + status_history_feed(),
             key=lambda e: e["created_at"], reverse=True,
@@ -911,7 +1055,7 @@ def context_workspace(ctx: str, selected_date: str | None = None) -> dict:
         # (due) for it, never a pretend live dashboard.
         plan = sorted(day_events, key=lambda e: (-e["importance"], -e["urgency"], e["created_at"]))
         overdue, deferred, blocked = [], [], []
-        waiting = [e for e in day_events if e["status"] == "inbox"]
+        waiting = [e for e in day_events if e["status"] == "recorded"]
         events = sorted(day_events + day_history, key=lambda e: e["created_at"], reverse=True)
 
     return {
@@ -959,7 +1103,7 @@ def calendar_activity(year: int, month: int) -> dict[str, int]:
     prefix = f"{year:04d}-{month:02d}"
     with connect() as conn:
         rows = conn.execute(
-            "SELECT substr(created_at,1,10) d, count(*) c FROM events WHERE deleted_at IS NULL AND substr(created_at,1,7)=? GROUP BY d",
+            "SELECT occurred_on d, count(*) c FROM events WHERE deleted_at IS NULL AND substr(occurred_on,1,7)=? GROUP BY occurred_on",
             (prefix,),
         ).fetchall()
     return {r["d"]: r["c"] for r in rows}

@@ -5,7 +5,7 @@ os.environ["PULDA_DB_PATH"] = "data/test-pulda.db"
 
 from datetime import datetime
 
-from pulda.db import init_db
+from pulda.db import init_db, connect
 from pulda.classifier import classify
 from pulda.service import (
     create_event, list_events, update_status, build_review, update_event, defer_event,
@@ -14,6 +14,8 @@ from pulda.service import (
     interpret_event, correct_interpretation, record_outcome, propose_follow_up,
     capture_knowledge_source, find_relevant_knowledge,
     capture_daily_activity, get_daily_activity,
+    bulk_update_status, list_workspace_tabs, add_workspace_tab, remove_workspace_tab,
+    create_recurrence_series, recurrence_dates, set_occurrence_status,
 )
 from pulda.timeutil import date_label, today_kst
 from datetime import timedelta
@@ -431,7 +433,7 @@ def test_status_change_is_recorded_and_appears_in_feed():
     history_entries = [e for e in workspace["recent"] if e.get("kind") == "status_change" and e["event_id"] == event_id]
     assert len(history_entries) == 2
     transitions = {(e["from_status"], e["to_status"]) for e in history_entries}
-    assert ("inbox", "doing") in transitions
+    assert ("recorded", "doing") in transitions
     assert ("doing", "done") in transitions
     # No-op status update (same value) must not create a spurious entry.
     update_status(event_id, "done")
@@ -569,3 +571,79 @@ def test_projects_nav_lists_and_scopes_by_project():
     assert project_name in distinct_projects()
     scoped = context_events(f"project:{project_name}", limit=10)
     assert scoped and all(e["project"] == project_name for e in scoped)
+
+
+def test_selected_calendar_date_is_event_date_not_capture_date():
+    from fastapi.testclient import TestClient
+    from pulda.app import app
+
+    client = TestClient(app)
+    past_date = "2026-01-02"
+    text = f"과거 발생 기록 {datetime.now().timestamp()}"
+    response = client.post("/capture", data={"text": text, "occurred_on": past_date})
+    assert response.status_code in (200, 303)
+    event = next(row for row in list_events(limit=1000) if row["text"] == text)
+    assert event["occurred_on"] == past_date
+    assert event["captured_at"][:10] == today_kst().isoformat()
+    assert event["status"] == "recorded"
+    assert event["source"] == "manual_ui"
+    workspace = context_workspace("today", selected_date=past_date)
+    assert any(row["id"] == event["id"] for row in workspace["events"])
+
+
+def test_legacy_inbox_planned_migration_preserves_rollback_value():
+    event_id = create_event("레거시 상태 보존")
+    with connect() as conn:
+        conn.execute("UPDATE events SET status='planned',legacy_status=NULL WHERE id=?", (event_id,))
+    init_db()
+    migrated = get_event(event_id)
+    assert migrated["status"] == "recorded"
+    assert migrated["legacy_status"] == "planned"
+
+
+def test_bulk_status_updates_only_selected_events_and_audits_history():
+    first = create_event("일괄 상태 첫째")
+    second = create_event("일괄 상태 둘째")
+    untouched = create_event("일괄 상태 제외")
+    result = bulk_update_status([first, second], "done")
+    assert result == {"selected_count": 2, "changed_count": 2, "status": "done"}
+    assert get_event(first)["status"] == "done"
+    assert get_event(second)["status"] == "done"
+    assert get_event(untouched)["status"] == "recorded"
+
+
+def test_recurrence_series_is_virtual_and_occurrences_are_independent():
+    event_id = create_event("매년 가족 생일")
+    series = create_recurrence_series(event_id, "yearly", "2024-05-10")
+    dates = recurrence_dates(series["id"], "2026-01-01", "2028-12-31")
+    assert dates == ["2026-05-10", "2027-05-10", "2028-05-10"]
+    occurrence = set_occurrence_status(series["id"], "2026-05-10", "recorded")
+    assert occurrence["status"] == "recorded"
+    assert recurrence_dates(series["id"], "2027-01-01", "2027-12-31") == ["2027-05-10"]
+
+
+def test_workspace_tabs_open_close_and_home_is_permanent():
+    initial = list_workspace_tabs()
+    assert any(tab["view_key"] == "home" and not tab["removable"] for tab in initial)
+    add_workspace_tab("life")
+    assert any(tab["view_key"] == "life" for tab in list_workspace_tabs())
+    remove_workspace_tab("life")
+    assert not any(tab["view_key"] == "life" for tab in list_workspace_tabs())
+    try:
+        remove_workspace_tab("home")
+        assert False, "home removal must fail"
+    except ValueError:
+        pass
+
+
+def test_workspace_picker_exposes_purpose_views_not_data_model_tabs():
+    from fastapi.testclient import TestClient
+    from pulda.app import app
+
+    client = TestClient(app)
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "생활" in response.text
+    assert "커뮤니티" in response.text
+    assert 'name="view_key"' in response.text
+    assert "Event / Task / Goal / Project" not in response.text

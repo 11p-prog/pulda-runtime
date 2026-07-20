@@ -1,5 +1,29 @@
 # Pulda Runtime Help
 
+## Event date and state
+
+- The selected date in the left calendar is the Event's occurrence date. The
+  actual input time is preserved separately.
+- New Events start as **기록됨**. Where they came from (direct input,
+  ChatGPT, API, import, or connector) is shown separately from status.
+- Status is optional during capture. Select one or more rows in the Event list
+  to change status in bulk.
+
+## Repeating Events
+
+Repeating Events have one series rule and independent dated occurrences. The
+series may be active, paused, or ended; a dated occurrence may be scheduled,
+recorded, skipped, or cancelled. A repeating series is not displayed as
+continuously "in progress," and the Runtime does not pre-create an unlimited
+future.
+
+## Central workspace
+
+Home is the permanent date-based Event tab. Use **+** to discover and open
+Life, Work, Community, Statistics, or Settings. Closing a tab closes only the
+view and never deletes Event data. The initial picker includes descriptions so
+new users do not need to memorize screen names.
+
 This is the living user-facing guide for behavior that exists in the current
 Runtime. Update it in the same Git change whenever visible behavior or a user
 constraint changes.

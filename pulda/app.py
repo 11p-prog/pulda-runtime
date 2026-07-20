@@ -18,6 +18,8 @@ from .service import (
     interpret_event, correct_interpretation, record_outcome, propose_follow_up,
     capture_knowledge_source, get_knowledge_source, find_relevant_knowledge,
     capture_daily_activity, get_daily_activity,
+    bulk_update_status, list_workspace_tabs, add_workspace_tab, remove_workspace_tab,
+    WORKSPACE_VIEWS, create_recurrence_series, recurrence_dates, set_occurrence_status,
 )
 from .connectors import (
     sync_notion, sync_github, check_notion, check_github,
@@ -30,13 +32,33 @@ app = FastAPI(title="Pulda Runtime MVP", version="0.1.0")
 templates = Jinja2Templates(directory="pulda/templates")
 
 STATUS_LABELS = {
-    "inbox": "수집됨", "planned": "계획됨", "doing": "진행중",
+    "recorded": "기록됨", "doing": "진행중",
     "done": "완료", "deferred": "보류", "dropped": "중단", "deleted": "삭제됨",
+    # Legacy history values remain readable after CR-0017's additive
+    # migration; they are no longer offered as current status choices.
+    "inbox": "기록됨", "planned": "기록됨",
 }
 
 class EventIn(BaseModel):
     text: str
     source: str = "api"
+    occurred_on: str | None = None
+
+class BulkStatusIn(BaseModel):
+    event_ids: list[int]
+    status: str
+
+class RecurrenceIn(BaseModel):
+    frequency: str
+    starts_on: str
+    interval_value: int = 1
+    ends_on: str | None = None
+    timezone: str = "Asia/Seoul"
+
+class OccurrenceStatusIn(BaseModel):
+    occurrence_date: str
+    status: str
+    note: str | None = None
 
 class EventPatch(BaseModel):
     status: str | None = None
@@ -160,6 +182,7 @@ def index(
     status: str | None = None,
     q: str | None = None,
     group: str = "none",
+    view: str = "home",
 ):
     """Home: the single Activity Feed (IA-0001/CR-0012, decided 2026-07-13,
     superseding the CR-0011 tab bar) — no central Event/Task/Goal/Project
@@ -177,6 +200,8 @@ def index(
         year, month = today_kst().year, today_kst().month
         selected_date = today_iso
         pinned = False
+    if view not in WORKSPACE_VIEWS:
+        view = "home"
     workspace = context_workspace("today", selected_date)
     review = review_for_date(selected_date)
     try:
@@ -201,6 +226,13 @@ def index(
         "display_events": display_events,
         "change_history": change_history,
         "event_filter": {"status": status or "all", "q": q or "", "group": group},
+        "active_view": view,
+        "workspace_tabs": list_workspace_tabs(),
+        "workspace_view_options": [
+            {"key": key, "label": label, "icon": icon}
+            for key, (label, icon) in WORKSPACE_VIEWS.items()
+            if key != "home" and key not in {tab["view_key"] for tab in list_workspace_tabs()}
+        ],
         "plan": workspace["plan"],
         "recent_events": workspace["recent"],
         "review": review,
@@ -210,7 +242,7 @@ def index(
         "insights": decision_support(),
         "notion_status": notion_status,
         "status_labels": STATUS_LABELS,
-        "status_options": ["inbox", "planned", "doing", "done", "deferred", "dropped"],
+        "status_options": ["recorded", "doing", "done", "deferred", "dropped"],
     })
 
 @app.get("/projects", response_class=HTMLResponse)
@@ -287,14 +319,19 @@ def _save_upload(file: UploadFile) -> tuple[str, int]:
     return stored_name, size
 
 @app.post("/capture")
-def capture(text: str = Form(...), file: UploadFile | None = File(None)):
+def capture(text: str = Form(...), occurred_on: str | None = Form(None), file: UploadFile | None = File(None)):
     # UX-0001: no mandatory category, project, goal, tag, or priority on
     # capture — role/area are inferred by the classifier only, never forced
     # by which tab the user happened to be in (that "context-first" tagging
     # went away with the CR-0011 tab bar it depended on).
     if not text.strip():
         raise HTTPException(400, "text required")
-    event_id = create_event(text.strip())
+    event_date = occurred_on or today_kst().isoformat()
+    try:
+        date.fromisoformat(event_date)
+    except ValueError:
+        raise HTTPException(400, "occurred_on must be YYYY-MM-DD")
+    event_id = create_event(text.strip(), source="manual_ui", occurred_on=event_date)
     if file is not None and file.filename:
         # Event and attachment aren't in a single DB transaction (attachment
         # writes hit the filesystem too), so on any upload failure the Event
@@ -307,6 +344,32 @@ def capture(text: str = Form(...), file: UploadFile | None = File(None)):
         except HTTPException:
             delete_event(event_id)
             raise
+    dest = "/" if event_date == today_kst().isoformat() else f"/?cal_date={event_date}"
+    return RedirectResponse(dest, status_code=303)
+
+@app.post("/events/bulk-status")
+def bulk_status(event_ids: list[int] = Form(...), status: str = Form(...), redirect_date: str | None = Form(None)):
+    try:
+        bulk_update_status(event_ids, status)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    dest = "/" if not redirect_date or redirect_date == today_kst().isoformat() else f"/?cal_date={redirect_date}"
+    return RedirectResponse(dest, status_code=303)
+
+@app.post("/workspace-tabs")
+def workspace_tab_add(view_key: str = Form(...)):
+    try:
+        add_workspace_tab(view_key)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return RedirectResponse(f"/?view={view_key}", status_code=303)
+
+@app.post("/workspace-tabs/{view_key}/remove")
+def workspace_tab_remove(view_key: str):
+    try:
+        remove_workspace_tab(view_key)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
     return RedirectResponse("/", status_code=303)
 
 @app.get("/attachments/{attachment_id}")
@@ -385,7 +448,35 @@ def github_action():
 
 @app.post("/api/events")
 def api_create_event(item: EventIn):
-    return {"id": create_event(item.text, item.source)}
+    return {"id": create_event(item.text, item.source, occurred_on=item.occurred_on or today_kst().isoformat())}
+
+@app.post("/api/events/bulk-status")
+def api_bulk_status(item: BulkStatusIn):
+    try:
+        return bulk_update_status(item.event_ids, item.status)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+@app.post("/api/events/{event_id}/recurrence")
+def api_create_recurrence(event_id: int, item: RecurrenceIn):
+    try:
+        return create_recurrence_series(event_id, **item.model_dump())
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+@app.get("/api/recurrences/{series_id}/dates")
+def api_recurrence_dates(series_id: int, window_start: str, window_end: str):
+    try:
+        return recurrence_dates(series_id, window_start, window_end)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+@app.post("/api/recurrences/{series_id}/occurrences")
+def api_occurrence_status(series_id: int, item: OccurrenceStatusIn):
+    try:
+        return set_occurrence_status(series_id, item.occurrence_date, item.status, item.note)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
 
 @app.post("/api/daily-activities")
 def api_capture_daily_activity(item: DailyActivityIn, request: Request):

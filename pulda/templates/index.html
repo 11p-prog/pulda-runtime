@@ -150,7 +150,32 @@
       </div>
     </header>
 
+    <div class="sticky top-[64px] z-30 flex items-end gap-1 overflow-x-auto border-b border-outline-variant/10 bg-surface-bright/90 px-10 pt-2 glass-blur">
+      {% for tab in workspace_tabs %}
+      <div class="group flex items-center gap-1 rounded-t-xl border-b-2 px-3 py-2 text-[12px] {{ 'border-primary bg-white text-primary' if tab.view_key == active_view else 'border-transparent text-on-surface-variant/65 hover:bg-surface-container-low' }}">
+        <a href="/?view={{ tab.view_key }}{% if selected_date != today %}&cal_date={{ selected_date }}{% endif %}" class="flex items-center gap-2 whitespace-nowrap"><span class="material-symbols-outlined text-[16px]">{{ tab.icon }}</span>{{ tab.label }}</a>
+        {% if tab.removable %}<form method="post" action="/workspace-tabs/{{ tab.view_key }}/remove"><button aria-label="{{ tab.label }} 닫기" class="ml-1 rounded-full text-on-surface-variant/40 hover:text-error"><span class="material-symbols-outlined text-[14px]">close</span></button></form>{% endif %}
+      </div>
+      {% endfor %}
+      <details class="relative mb-1">
+        <summary class="flex h-8 w-8 cursor-pointer list-none items-center justify-center rounded-lg text-on-surface-variant/60 hover:bg-primary/10 hover:text-primary"><span class="material-symbols-outlined text-[18px]">add</span></summary>
+        <div class="fixed left-[300px] top-[116px] z-50 grid w-[420px] grid-cols-2 gap-2 rounded-2xl border border-outline-variant/15 bg-white p-3 shadow-xl">
+          {% for option in workspace_view_options %}
+          <form method="post" action="/workspace-tabs">
+            <input type="hidden" name="view_key" value="{{ option.key }}">
+            <button class="flex min-h-24 w-full flex-col items-start rounded-xl border border-outline-variant/10 p-4 text-left hover:border-primary/30 hover:bg-primary/5">
+              <span class="material-symbols-outlined mb-2 text-primary">{{ option.icon }}</span><strong class="text-[13px]">{{ option.label }}</strong>
+              <span class="mt-1 text-[11px] text-on-surface-variant/60">{{ {'life':'일상·가족·취미·건강·성장 흐름','work':'프로젝트와 WBS','community':'종교·단체·모임 활동','stats':'기간별 리듬·부하·공백','settings':'화면·반복·연결 기본값'}[option.key] }}</span>
+            </button>
+          </form>
+          {% else %}<p class="col-span-2 p-4 text-[12px] text-on-surface-variant/50">추가할 수 있는 모든 화면이 열려 있습니다.</p>{% endfor %}
+        </div>
+      </details>
+    </div>
+
     <div class="max-w-4xl mx-auto w-full px-10 py-10 pb-36 flex flex-col gap-14">
+
+      {% if active_view == 'home' %}
 
       <!-- Screenshot recovery baseline (user decision, 2026-07-19): the
            selected date's Event list is Home's default center workspace. -->
@@ -173,7 +198,7 @@
             <input type="hidden" name="cal_date" value="{{ selected_date }}">
             <div class="flex flex-wrap items-center gap-2">
               <span class="w-12 text-[11px] text-on-surface-variant/55">상태</span>
-              {% for value, label in [('all','전체'),('inbox','수집됨'),('planned','계획됨'),('doing','진행중'),('done','완료'),('deferred','보류'),('dropped','중단')] %}
+              {% for value, label in [('all','전체'),('recorded','기록됨'),('doing','진행중'),('done','완료'),('deferred','보류'),('dropped','중단')] %}
               <label class="cursor-pointer">
                 <input class="peer sr-only" type="radio" name="status" value="{{ value }}" {{ 'checked' if event_filter.status == value }}>
                 <span class="inline-flex rounded-full px-3 py-1.5 text-[11px] text-on-surface-variant peer-checked:bg-primary peer-checked:text-on-primary hover:bg-surface-container-low">{{ label }}</span>
@@ -189,21 +214,25 @@
           </form>
         </details>
 
+        <form id="bulk-status-form" method="post" action="/events/bulk-status" class="flex items-center gap-2 rounded-xl bg-surface-container-low p-3">
+          <input type="hidden" name="redirect_date" value="{{ selected_date }}">
+          <button type="button" id="select-all-events" class="rounded-lg px-3 py-2 text-[11px] hover:bg-white">현재 목록 전체 선택</button>
+          <select name="status" class="rounded-lg border-none bg-white py-2 text-[11px]">{% for s in status_options %}<option value="{{ s }}">{{ status_labels[s] }}</option>{% endfor %}</select>
+          <button class="rounded-lg bg-primary px-3 py-2 text-[11px] font-semibold text-white">선택 상태 변경</button>
+          <span id="selected-event-count" class="ml-auto text-[11px] text-on-surface-variant/60">0건 선택</span>
+        </form>
         <div class="divide-y divide-outline-variant/10">
           {% for e in display_events %}
           <details class="group">
             <summary class="list-none cursor-pointer flex items-center gap-3 py-3 px-2 hover:bg-surface-container-low rounded-lg">
+              <input type="checkbox" name="event_ids" value="{{ e.id }}" form="bulk-status-form" class="event-selector rounded border-outline-variant/40" onclick="event.stopPropagation()">
               <span class="text-[10px] font-semibold px-2 py-1 rounded-full shrink-0 {% if e.status == 'done' %}bg-success-container text-success{% elif e.status == 'deferred' %}bg-warning-container text-warning{% elif e.status == 'doing' %}bg-primary/10 text-primary{% else %}bg-secondary-container text-on-secondary-container{% endif %}">{{ status_labels[e.status] }}</span>
               <span class="min-w-0 flex-1 truncate text-[14px] text-on-surface">{{ e.text }}</span>
               <span class="shrink-0 text-[11px] text-on-surface-variant/45">{{ e.created_at[11:16] if e.created_at|length > 11 else e.created_at }}</span>
             </summary>
             <div class="flex flex-wrap items-center gap-3 px-3 pb-3 pl-24 text-[11px] text-on-surface-variant/65">
               <span>{{ e.role }} / {{ e.area }}{% if e.project %} · {{ e.project }}{% endif %}</span>
-              <form method="post" action="/status/{{ e.id }}" class="flex items-center gap-1">
-                <input type="hidden" name="redirect_date" value="{{ selected_date }}">
-                <select name="status" class="rounded-lg border-none bg-surface-container-low py-1 text-[11px]">{% for s in status_options %}<option value="{{ s }}" {{ 'selected' if s == e.status }}>{{ status_labels[s] }}</option>{% endfor %}</select>
-                <button class="px-2 font-medium text-primary">변경</button>
-              </form>
+              <span>유입: {{ e.source }}</span>
               <details class="relative inline-block">
                 <summary class="list-none cursor-pointer text-error/80">삭제</summary>
                 <div class="absolute right-0 z-20 mt-1 w-48 space-y-1 rounded-lg border border-outline-variant/20 bg-surface-container p-2 shadow-lg">
@@ -551,6 +580,18 @@
       </div>
       {% endif %}
 
+      {% else %}
+      <section class="space-y-6" aria-labelledby="workspace-view-title">
+        <div><p class="text-[11px] uppercase tracking-widest text-primary">Workspace</p><h2 id="workspace-view-title" class="mt-2 text-2xl font-semibold">{{ {'life':'생활','work':'업무','community':'커뮤니티','stats':'통계','settings':'설정'}[active_view] }}</h2></div>
+        {% if active_view == 'life' %}
+        <div class="grid grid-cols-2 gap-4">{% for title, desc in [('생활·회복','일상과 취미의 흐름'),('가족','가족 일정과 기록'),('관계·공동체','사람과 공동체 활동'),('성장·건강','학습·운동·자기계발')] %}<div class="rounded-2xl border border-outline-variant/10 bg-white p-6"><h3 class="font-semibold">{{ title }}</h3><p class="mt-2 text-[12px] text-on-surface-variant/60">{{ desc }}</p></div>{% endfor %}</div>
+        {% elif active_view == 'work' %}<div class="rounded-2xl bg-white p-8"><p class="text-sm text-on-surface-variant">Project Dashboard / Portfolio WBS</p><a href="/projects" class="mt-4 inline-block text-sm font-semibold text-primary">프로젝트 화면 열기 →</a></div>
+        {% elif active_view == 'community' %}<div class="rounded-2xl bg-white p-8 text-sm text-on-surface-variant">종교·단체·모임 Event를 날짜와 공동체별로 연결하는 화면입니다.</div>
+        {% elif active_view == 'stats' %}<div class="rounded-2xl bg-white p-8 text-sm text-on-surface-variant">기간별 활동 분포·리듬·부하·장기 공백을 표시하는 화면입니다.</div>
+        {% elif active_view == 'settings' %}<div class="rounded-2xl bg-white p-8 text-sm text-on-surface-variant">워크스페이스·반복·알림·연결 기본값을 관리하는 화면입니다.</div>{% endif %}
+      </section>
+      {% endif %}
+
     </div>
   </main>
 
@@ -597,6 +638,7 @@
   <div class="fixed bottom-6 left-64 right-80 flex flex-col items-center px-6 z-[60] pointer-events-none gap-1.5">
     <form method="post" action="/capture" id="capture-bar-form" enctype="multipart/form-data"
       class="pointer-events-auto w-full max-w-2xl bg-surface-container-lowest/95 glass-blur rounded-[1.5rem] shadow-[0_12px_40px_rgba(0,0,0,0.14)] border border-outline-variant/10 p-2 flex flex-col gap-1">
+      <input type="hidden" name="occurred_on" value="{{ selected_date }}">
       <div id="capture-file-preview" class="hidden items-center gap-2 px-3 pt-1 text-[12px] text-on-surface-variant/70">
         <span class="material-symbols-outlined text-[15px]">attach_file</span>
         <span id="capture-file-name" class="truncate flex-1"></span>
@@ -656,6 +698,19 @@
     }
   });
   ta.focus();
+
+  var selectors = Array.prototype.slice.call(document.querySelectorAll('.event-selector'));
+  var selectAll = document.getElementById('select-all-events');
+  var selectedCount = document.getElementById('selected-event-count');
+  function refreshSelectedCount() {
+    if (selectedCount) selectedCount.textContent = selectors.filter(function (box) { return box.checked; }).length + '건 선택';
+  }
+  selectors.forEach(function (box) { box.addEventListener('change', refreshSelectedCount); });
+  if (selectAll) selectAll.addEventListener('click', function () {
+    var shouldSelect = selectors.some(function (box) { return !box.checked; });
+    selectors.forEach(function (box) { box.checked = shouldSelect; });
+    refreshSelectedCount();
+  });
 })();
 
 // Automatic day rollover (Review v3 #2): "Today" must follow real time

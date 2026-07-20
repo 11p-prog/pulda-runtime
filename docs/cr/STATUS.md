@@ -41,6 +41,8 @@ alone is insufficient. `Related Git Commit` must carry the real commit hash.
 | CR-0014 | First Contextual Knowledge Case | High | Prepared locally — code/schema/API/docs/tests ready; remote commit and Runtime user verification pending | Codex | User | 2026-07-17 | 2026-07-17 |
 | CR-0015 | ChatGPT Daily Activity Capture | High | In Progress — direct ingest deployed and Event ID verified; Notion relay passes locally, deployment/reauthorization/end-to-end run pending | ChatGPT | User | 2026-07-18 | 2026-07-19 |
 | CR-0016 | Autoscale PostgreSQL Runtime Persistence | High | In Progress — dual backend passes locally; deployment and redeploy persistence proof pending | ChatGPT | User | 2026-07-19 | 2026-07-19 |
+| CR-0017 | Event Date, State, Source, and Recurrence | High | Implemented locally — 35 tests pass; private deployment backup/restore, commit, deploy and Runtime user verification pending | ChatGPT | User | 2026-07-20 | 2026-07-20 |
+| CR-0018 | User-managed Central Workspace Views | High | Implemented locally — 35 tests pass; responsive Runtime and user verification pending | ChatGPT | User | 2026-07-20 | 2026-07-20 |
 
 ## RFCs open for discussion
 - RFC-0001 — AI Memory Structure

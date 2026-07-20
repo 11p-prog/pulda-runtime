@@ -15,6 +15,9 @@ CREATE TABLE IF NOT EXISTS events (
   urgency INTEGER NOT NULL,
   importance INTEGER NOT NULL,
   status TEXT NOT NULL,
+  captured_at TEXT,
+  occurred_on TEXT,
+  legacy_status TEXT,
   scheduled_at TEXT,
   due_date TEXT,
   project TEXT,
@@ -27,6 +30,37 @@ CREATE TABLE IF NOT EXISTS events (
   notion_page_id TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS recurrence_series (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_id INTEGER NOT NULL REFERENCES events(id),
+  frequency TEXT NOT NULL CHECK(frequency IN ('daily','weekly','monthly','yearly')),
+  interval_value INTEGER NOT NULL DEFAULT 1,
+  starts_on TEXT NOT NULL,
+  ends_on TEXT,
+  timezone TEXT NOT NULL DEFAULT 'Asia/Seoul',
+  status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','paused','ended')),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS recurrence_occurrences (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  series_id INTEGER NOT NULL REFERENCES recurrence_series(id),
+  occurrence_date TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'scheduled' CHECK(status IN ('scheduled','recorded','skipped','cancelled')),
+  exception_note TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(series_id, occurrence_date)
+);
+CREATE TABLE IF NOT EXISTS workspace_tabs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  view_key TEXT NOT NULL UNIQUE,
+  label TEXT NOT NULL,
+  icon TEXT NOT NULL DEFAULT 'dashboard',
+  removable INTEGER NOT NULL DEFAULT 1,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS reviews (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -174,6 +208,9 @@ NEW_EVENT_COLUMNS = {
     "next_review_at": "TEXT",
     "notion_page_id": "TEXT",
     "deleted_at": "TEXT",
+    "captured_at": "TEXT",
+    "occurred_on": "TEXT",
+    "legacy_status": "TEXT",
 }
 
 def database_backend() -> str:
@@ -187,10 +224,16 @@ def _migrate_sqlite(conn: sqlite3.Connection) -> None:
     review_columns = {row[1] for row in conn.execute("PRAGMA table_info(reviews)").fetchall()}
     if "reflection" not in review_columns:
         conn.execute("ALTER TABLE reviews ADD COLUMN reflection TEXT")
-    # CR-0011 (user-managed tab bar) was reverted per CR-0012/IA-0001 (single
-    # Activity Feed + fixed nav, decided 2026-07-13) — drop the now-unused
-    # table on any DB that already created it.
-    conn.execute("DROP TABLE IF EXISTS workspace_tabs")
+    conn.execute("UPDATE events SET captured_at=COALESCE(captured_at, created_at)")
+    conn.execute("UPDATE events SET occurred_on=COALESCE(occurred_on, substr(created_at,1,10))")
+    conn.execute("UPDATE events SET legacy_status=status, status='recorded' WHERE status IN ('inbox','planned')")
+    now = conn.execute("SELECT datetime('now') AS now").fetchone()[0]
+    conn.execute(
+        """INSERT OR IGNORE INTO workspace_tabs
+        (view_key,label,icon,removable,sort_order,created_at)
+        VALUES('home','오늘','event',0,0,?)""",
+        (now,),
+    )
 
 def init_db() -> None:
     if settings.database_url:
@@ -219,7 +262,15 @@ def _init_postgres() -> None:
         for column, col_type in NEW_EVENT_COLUMNS.items():
             conn.execute(f"ALTER TABLE events ADD COLUMN IF NOT EXISTS {column} {col_type}")
         conn.execute("ALTER TABLE reviews ADD COLUMN IF NOT EXISTS reflection TEXT")
-        conn.execute("DROP TABLE IF EXISTS workspace_tabs")
+        conn.execute("UPDATE events SET captured_at=COALESCE(captured_at, created_at)")
+        conn.execute("UPDATE events SET occurred_on=COALESCE(occurred_on, substring(created_at,1,10))")
+        conn.execute("UPDATE events SET legacy_status=status, status='recorded' WHERE status IN ('inbox','planned')")
+        conn.execute(
+            """INSERT INTO workspace_tabs
+            (view_key,label,icon,removable,sort_order,created_at)
+            VALUES('home','오늘','event',0,0,CURRENT_TIMESTAMP)
+            ON CONFLICT (view_key) DO NOTHING"""
+        )
 
 def _postgres_sql(sql: str) -> str:
     converted = sql.replace("?", "%s")

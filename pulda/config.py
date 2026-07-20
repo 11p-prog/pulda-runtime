@@ -15,7 +15,7 @@ class Settings:
     max_attachment_mb: int = int(os.getenv("PULDA_MAX_ATTACHMENT_MB", "20"))
     timezone: str = os.getenv("PULDA_TIMEZONE", "Asia/Seoul")
     host: str = os.getenv("PULDA_HOST", "0.0.0.0")
-    port: int = int(os.getenv("PULDA_PORT", "8000"))
+    port: int = int(os.getenv("PULDA_PORT") or os.getenv("PORT", "8000"))
     auto_review: bool = _bool("AUTO_REVIEW", True)
     auto_sync_notion: bool = _bool("AUTO_SYNC_NOTION", False)
     auto_sync_github: bool = _bool("AUTO_SYNC_GITHUB", False)

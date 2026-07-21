@@ -37,6 +37,32 @@ def snapshot():
     return {"batch": dict(batch), "event": dict(event),
             "items": [dict(x) for x in items], "receipts": [dict(x) for x in receipts]}
 
+def migrated_test_snapshot():
+    """Return the separated test batch, or None before the migration.
+
+    2026-07-21 correction for CR-0015: the verifier must accept the stable
+    post-migration state instead of requiring the test item to remain in the
+    operational batch. Recovery baseline: the commit immediately before this
+    correction.
+    """
+    with connect() as conn:
+        batch = conn.execute(
+            "SELECT * FROM daily_activity_batches WHERE external_key=?",
+            (f"chatgpt:test:daily:{DATE}",),
+        ).fetchone()
+        if not batch:
+            return None
+        event = conn.execute("SELECT * FROM events WHERE id=?", (batch["event_id"],)).fetchone()
+        items = conn.execute(
+            "SELECT * FROM daily_activity_items WHERE batch_id=? ORDER BY id", (batch["id"],)
+        ).fetchall()
+        receipt = conn.execute(
+            "SELECT * FROM daily_activity_envelopes WHERE batch_id=? AND external_key=?",
+            (batch["id"], TEST_KEY),
+        ).fetchone()
+    return {"batch": dict(batch), "event": dict(event),
+            "items": [dict(x) for x in items], "receipt": dict(receipt) if receipt else None}
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--apply", action="store_true")
@@ -49,6 +75,25 @@ def main():
     report = {"mode": "apply" if args.apply else "dry-run", "backup": args.backup,
               "event_id": before["event"]["id"], "item_count": len(before["items"]),
               "test_item_ids": [x["id"] for x in test_items]}
+    separated = migrated_test_snapshot()
+    if len(test_items) == 0 and separated:
+        separated_items = [x for x in separated["items"] if x["summary"] == TEST_SUMMARY]
+        valid = (
+            len(before["items"]) == 8
+            and len(separated_items) == 1
+            and separated["receipt"] is not None
+            and separated["receipt"]["data_class"] == "test"
+        )
+        if not valid:
+            raise SystemExit(json.dumps({**report, "status": "inconsistent_post_migration",
+                                         "test_event_id": separated["event"]["id"],
+                                         "test_batch_id": separated["batch"]["id"]}))
+        print(json.dumps({**report, "status": "already_migrated",
+                          "operational_item_count": len(before["items"]),
+                          "test_item_count": len(separated_items),
+                          "test_event_id": separated["event"]["id"],
+                          "test_batch_id": separated["batch"]["id"]}, ensure_ascii=False))
+        return
     if len(test_items) != 1:
         raise SystemExit(json.dumps({**report, "error": "expected exactly one known test item"}))
     if not args.apply:

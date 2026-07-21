@@ -136,6 +136,7 @@ class DailyActivityIn(BaseModel):
     access_gaps: str = ""
     privacy_reviewed: bool = False
     items: list[DailyActivityItemIn] = Field(default_factory=list)
+    data_class: str = "operational"
 
 def _require_daily_activity_token(request: Request) -> None:
     expected = settings.daily_activity_ingest_token
@@ -497,6 +498,7 @@ def api_capture_daily_activity(item: DailyActivityIn, request: Request):
             access_gaps=item.access_gaps,
             privacy_reviewed=item.privacy_reviewed,
             items=[entry.model_dump() for entry in item.items],
+            data_class=item.data_class,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))

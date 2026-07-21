@@ -132,7 +132,14 @@ def pull_notion_daily_activities() -> dict:
 
     processed = []
     ignored = 0
-    cursor = None
+    checkpoint_key = f"notion-daily-activity:{page_id}"
+    from .db import connect
+    with connect() as conn:
+        checkpoint = conn.execute(
+            "SELECT cursor FROM connector_checkpoints WHERE connector_key=?", (checkpoint_key,)
+        ).fetchone()
+    cursor = checkpoint["cursor"] if checkpoint else None
+    last_block_id = None
     try:
         while True:
             suffix = "?page_size=100"
@@ -143,6 +150,7 @@ def pull_notion_daily_activities() -> dict:
             response.raise_for_status()
             body = response.json()
             for block in body.get("results", []):
+                last_block_id = block.get("id") or last_block_id
                 raw = _block_plain_text(block)
                 if not raw.startswith("{"):
                     continue
@@ -155,8 +163,10 @@ def pull_notion_daily_activities() -> dict:
                     continue
                 payload = {key: envelope.get(key) for key in (
                     "activity_date", "source_channel", "external_key",
-                    "source_coverage", "access_gaps", "privacy_reviewed", "items",
+                    "source_coverage", "access_gaps", "privacy_reviewed", "items", "data_class",
                 )}
+                payload["data_class"] = payload.get("data_class") or "operational"
+                payload["source_block_id"] = block.get("id")
                 result = capture_daily_activity(**payload)
                 processed.append({
                     "external_key": payload["external_key"],
@@ -169,11 +179,28 @@ def pull_notion_daily_activities() -> dict:
                 break
             cursor = body.get("next_cursor")
 
+        if last_block_id:
+            now = __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat()
+            with connect() as conn:
+                conn.execute(
+                    """INSERT INTO connector_checkpoints(connector_key,cursor,updated_at)
+                    VALUES(?,?,?) ON CONFLICT(connector_key) DO UPDATE
+                    SET cursor=excluded.cursor, updated_at=excluded.updated_at""",
+                    (checkpoint_key, last_block_id, now),
+                )
+
         audit("pull_notion_daily_activities", page_id, "success", f"processed={len(processed)}")
-        return {"ok": True, "processed": processed, "ignored": ignored}
+        return {"ok": True, "processed": processed, "ignored": ignored,
+                "checkpoint": last_block_id or (checkpoint["cursor"] if checkpoint else None),
+                "event_ids": sorted({row["event_id"] for row in processed}),
+                "added_count": sum(row["added_count"] for row in processed), "errors": []}
     except Exception as e:
         audit("pull_notion_daily_activities", page_id, "failed", str(e))
-        return {"ok": False, "processed": processed, "ignored": ignored, "error": str(e)}
+        return {"ok": False, "processed": processed, "ignored": ignored,
+                "checkpoint": checkpoint["cursor"] if checkpoint else None,
+                "event_ids": sorted({row["event_id"] for row in processed}),
+                "added_count": sum(row["added_count"] for row in processed),
+                "errors": [{"error": str(e)}], "error": str(e)}
 
 def _github_request(method: str, path: str, use_connector: bool, json_body: dict | None = None,
                      params: dict | None = None):

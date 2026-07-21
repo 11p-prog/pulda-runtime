@@ -22,12 +22,15 @@ def daily_activity_queue_cycle():
         audit("daily_activity_queue_cycle", "scheduler", "failed", str(e))
 
 def start_scheduler():
-    if settings.auto_review and not scheduler.running:
-        scheduler.add_job(
-            daily_cycle, "cron",
-            hour=settings.review_hour, minute=settings.review_minute,
-            id="daily_cycle", replace_existing=True,
-        )
+    # 2026-07-21 / CR-0015: queue ingestion is an independent circulation job;
+    # AUTO_REVIEW only controls review generation. Recovery: revert this commit.
+    if not scheduler.running and (settings.auto_review or settings.auto_ingest_daily_activity_queue):
+        if settings.auto_review:
+            scheduler.add_job(
+                daily_cycle, "cron",
+                hour=settings.review_hour, minute=settings.review_minute,
+                id="daily_cycle", replace_existing=True,
+            )
         if settings.auto_ingest_daily_activity_queue:
             scheduler.add_job(
                 daily_activity_queue_cycle, "cron",

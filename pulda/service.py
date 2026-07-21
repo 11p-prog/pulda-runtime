@@ -32,7 +32,26 @@ def get_daily_activity(activity_date: str, source_channel: str = "chatgpt") -> d
             (batch["id"],),
         ).fetchall()
         event = conn.execute("SELECT * FROM events WHERE id=?", (batch["event_id"],)).fetchone()
-    return {"batch": dict(batch), "event": dict(event), "items": [dict(row) for row in items]}
+        envelopes = conn.execute(
+            "SELECT * FROM daily_activity_envelopes WHERE batch_id=? ORDER BY id",
+            (batch["id"],),
+        ).fetchall()
+    return {"batch": dict(batch), "event": dict(event), "items": [dict(row) for row in items],
+            "envelopes": [dict(row) for row in envelopes]}
+
+def get_daily_activity_by_external_key(external_key: str) -> dict | None:
+    with connect() as conn:
+        receipt = conn.execute(
+            "SELECT * FROM daily_activity_envelopes WHERE external_key=?", (external_key.strip(),)
+        ).fetchone()
+        if not receipt:
+            return None
+        batch = conn.execute(
+            "SELECT * FROM daily_activity_batches WHERE id=?", (receipt["batch_id"],)
+        ).fetchone()
+    result = get_daily_activity(batch["activity_date"], batch["source_channel"])
+    result.update({"created": False, "added_count": 0, "receipt": dict(receipt), "replayed": True})
+    return result
 
 def capture_daily_activity(
     *,
@@ -43,6 +62,8 @@ def capture_daily_activity(
     source_coverage: str = "",
     access_gaps: str = "",
     privacy_reviewed: bool = False,
+    data_class: str = "operational",
+    source_block_id: str | None = None,
 ) -> dict:
     """Register one date/channel activity Event and idempotently append items."""
     try:
@@ -53,6 +74,19 @@ def capture_daily_activity(
         raise ValueError("source_channel and external_key are required")
     if not privacy_reviewed:
         raise ValueError("privacy_reviewed must be true before Runtime registration")
+    if data_class not in {"operational", "test"}:
+        raise ValueError("data_class must be operational or test")
+    payload_hash = hashlib.sha256(json.dumps({
+        "activity_date": activity_date, "source_channel": source_channel,
+        "external_key": external_key, "data_class": data_class,
+        "source_coverage": source_coverage, "access_gaps": access_gaps, "items": items,
+    }, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    replay = get_daily_activity_by_external_key(external_key)
+    if replay:
+        if replay["receipt"]["payload_hash"] != payload_hash:
+            raise ValueError("external_key already processed with a different payload")
+        return replay
+    effective_channel = source_channel.strip() if data_class == "operational" else f"{source_channel.strip()}:test"
     for item in items:
         if item.get("item_type") not in DAILY_ACTIVITY_TYPES:
             raise ValueError("invalid daily activity item_type")
@@ -61,12 +95,12 @@ def capture_daily_activity(
         if not str(item.get("summary", "")).strip():
             raise ValueError("daily activity item summary is required")
 
-    existing = get_daily_activity(activity_date, source_channel)
+    existing = get_daily_activity(activity_date, effective_channel)
     created = existing is None
     if created:
         event_id = create_event(
-            f"{activity_date} ChatGPT Daily Activity",
-            source=f"daily_activity:{source_channel}",
+            f"{activity_date} {'Test ' if data_class == 'test' else ''}ChatGPT Daily Activity",
+            source=f"daily_activity:{effective_channel}",
             project="PRJ-PULDA-OS",
         )
         now = now_kst().isoformat(timespec="seconds")
@@ -76,7 +110,8 @@ def capture_daily_activity(
                     """INSERT INTO daily_activity_batches
                     (event_id,activity_date,source_channel,external_key,source_coverage,access_gaps,privacy_reviewed,status,created_at,updated_at)
                     VALUES(?,?,?,?,?,?,1,'registered',?,?)""",
-                    (event_id, activity_date, source_channel.strip(), external_key.strip(),
+                    (event_id, activity_date, effective_channel,
+                     f"{effective_channel}:daily:{activity_date}",
                      source_coverage.strip(), access_gaps.strip(), now, now),
                 )
                 batch_id = cur.lastrowid
@@ -87,11 +122,17 @@ def capture_daily_activity(
         event_id = existing["event"]["id"]
         batch_id = existing["batch"]["id"]
         now = now_kst().isoformat(timespec="seconds")
+        def merge_text(previous: str, incoming: str) -> str:
+            parts = [part for part in (previous or "").split("\n") if part]
+            if incoming.strip() and incoming.strip() not in parts:
+                parts.append(incoming.strip())
+            return "\n".join(parts)
         with connect() as conn:
             conn.execute(
                 """UPDATE daily_activity_batches
                 SET source_coverage=?, access_gaps=?, privacy_reviewed=1, updated_at=? WHERE id=?""",
-                (source_coverage.strip(), access_gaps.strip(), now, batch_id),
+                (merge_text(existing["batch"]["source_coverage"], source_coverage),
+                 merge_text(existing["batch"]["access_gaps"], access_gaps), now, batch_id),
             )
 
     added = 0
@@ -109,9 +150,16 @@ def capture_daily_activity(
             added += cur.rowcount
         if added:
             conn.execute("UPDATE events SET updated_at=? WHERE id=?", (now, event_id))
+        conn.execute(
+            """INSERT INTO daily_activity_envelopes
+            (batch_id,external_key,data_class,source_block_id,payload_hash,added_count,status,processed_at)
+            VALUES(?,?,?,?,?,?,'processed',?)""",
+            (batch_id, external_key.strip(), data_class, source_block_id, payload_hash, added, now),
+        )
     audit("capture_daily_activity", str(event_id), "success", f"added={added}")
-    result = get_daily_activity(activity_date, source_channel)
-    result.update({"created": created, "added_count": added})
+    result = get_daily_activity(activity_date, effective_channel)
+    receipt = next(row for row in result["envelopes"] if row["external_key"] == external_key.strip())
+    result.update({"created": created, "added_count": added, "receipt": receipt, "replayed": False})
     return result
 
 def _knowledge_source_dict(row) -> dict:

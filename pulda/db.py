@@ -183,6 +183,24 @@ CREATE TABLE IF NOT EXISTS daily_activity_batches (
   updated_at TEXT NOT NULL,
   UNIQUE(activity_date, source_channel)
 );
+CREATE TABLE IF NOT EXISTS daily_activity_envelopes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  batch_id INTEGER NOT NULL REFERENCES daily_activity_batches(id),
+  external_key TEXT NOT NULL UNIQUE,
+  data_class TEXT NOT NULL DEFAULT 'operational' CHECK(data_class IN ('operational','test')),
+  source_block_id TEXT UNIQUE,
+  payload_hash TEXT NOT NULL,
+  added_count INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'processed' CHECK(status IN ('processed','failed')),
+  error TEXT,
+  processed_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS connector_checkpoints (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  connector_key TEXT NOT NULL UNIQUE,
+  cursor TEXT,
+  updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS daily_activity_items (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   batch_id INTEGER NOT NULL REFERENCES daily_activity_batches(id),
@@ -237,6 +255,9 @@ def _migrate_sqlite(conn: sqlite3.Connection) -> None:
         VALUES('home','오늘','event',0,0,?)""",
         (now,),
     )
+    # 2026-07-21 / CR-0015: preserve the original aggregate table while adding
+    # envelope receipts and connector checkpoints.  Recovery: revert the code
+    # commit; these additive tables can remain unused without data loss.
 
 def init_db() -> None:
     global _postgres_available

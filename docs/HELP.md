@@ -107,6 +107,11 @@ still rule-based and there is no live LLM provider or human-review UI.
   `DAILY_ACTIVITY_PULL_MINUTE` when needed.
 - `POST /integrations/notion/daily-activities/pull` performs the same pull on
   demand and requires the daily activity Bearer token.
+- Each queue envelope needs a stable unique `external_key`. `data_class` is
+  `operational` by default; use `test` for verification data so it is stored in
+  a separate test Event. Successful pulls return `event_ids`, total
+  `added_count`, `checkpoint`, and `errors`. The checkpoint prevents rescanning
+  blocks already observed. Daily queue ingestion is independent of `AUTO_REVIEW`.
 
 ## Runtime database selection
 

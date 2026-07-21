@@ -146,19 +146,45 @@ def test_daily_activity_capture_is_date_scoped_idempotent_and_portable():
     first = capture_daily_activity(**payload)
     assert first["created"] is True
     assert first["added_count"] == 2
+    assert first["replayed"] is False
     assert first["event"]["source"] == "daily_activity:chatgpt"
     assert first["event"]["project"] == "PRJ-PULDA-OS"
 
     repeated = capture_daily_activity(**payload)
     assert repeated["created"] is False
     assert repeated["added_count"] == 0
+    assert repeated["replayed"] is True
     assert repeated["event"]["id"] == first["event"]["id"]
     assert len(repeated["items"]) == 2
 
+    changed = dict(payload)
+    changed["items"] = payload["items"] + [{"item_type": "decision", "summary": "변경됨"}]
+    try:
+        capture_daily_activity(**changed)
+        assert False, "same external_key with changed payload must fail"
+    except ValueError as exc:
+        assert "different payload" in str(exc)
+
+    appended = dict(payload)
+    appended["external_key"] = "chatgpt:secondary:2026-07-18"
+    appended["source_coverage"] = "second envelope"
+    appended["items"] = [{"item_type": "work_result", "summary": "두 번째 봉투"}]
+    merged = capture_daily_activity(**appended)
+    assert merged["event"]["id"] == first["event"]["id"]
+    assert merged["added_count"] == 1
+    assert merged["batch"]["source_coverage"].splitlines() == [
+        payload["source_coverage"], "second envelope"
+    ]
+
     exported = get_daily_activity("2026-07-18", "chatgpt")
-    assert exported["batch"]["external_key"] == payload["external_key"]
-    assert exported["batch"]["source_coverage"] == payload["source_coverage"]
-    assert {item["item_type"] for item in exported["items"]} == {"decision", "hold"}
+    assert exported["batch"]["external_key"] == "chatgpt:daily:2026-07-18"
+    assert exported["envelopes"][0]["external_key"] == payload["external_key"]
+    assert exported["batch"]["source_coverage"].splitlines() == [
+        payload["source_coverage"], "second envelope"
+    ]
+    assert {item["item_type"] for item in exported["items"]} == {
+        "decision", "hold", "work_result"
+    }
 
 def test_daily_activity_api_returns_event_id_and_rejects_invalid_items():
     from fastapi.testclient import TestClient
@@ -249,6 +275,7 @@ def test_notion_queue_pull_registers_and_retries_idempotently(monkeypatch):
         def json(self):
             return {
                 "results": [{
+                    "id": "notion-block-1",
                     "type": "code",
                     "code": {"rich_text": [{"plain_text": json.dumps(envelope)}]},
                 }],
@@ -270,6 +297,50 @@ def test_notion_queue_pull_registers_and_retries_idempotently(monkeypatch):
     assert repeated["processed"][0]["created"] is False
     assert repeated["processed"][0]["added_count"] == 0
     assert repeated["processed"][0]["event_id"] == first["processed"][0]["event_id"]
+    assert first["added_count"] == 1
+    assert first["event_ids"] == [first["processed"][0]["event_id"]]
+    assert first["checkpoint"] == "notion-block-1"
+
+def test_test_envelope_is_separate_from_operational_daily_event():
+    operational = capture_daily_activity(
+        activity_date="2026-07-23", source_channel="chatgpt",
+        external_key="chatgpt:primary:2026-07-23", privacy_reviewed=True,
+        items=[{"item_type": "decision", "summary": "운영 항목"}],
+    )
+    test = capture_daily_activity(
+        activity_date="2026-07-23", source_channel="chatgpt",
+        external_key="chatgpt:test:2026-07-23", privacy_reviewed=True,
+        data_class="test",
+        items=[{"item_type": "work_result", "summary": "테스트 항목"}],
+    )
+    assert operational["event"]["id"] != test["event"]["id"]
+    assert test["batch"]["source_channel"] == "chatgpt:test"
+    assert [row["summary"] for row in operational["items"]] == ["운영 항목"]
+
+def test_scheduler_can_start_daily_ingest_when_auto_review_is_disabled(monkeypatch):
+    import pulda.scheduler as scheduler_module
+    from pulda.config import settings
+
+    class FakeScheduler:
+        running = False
+        def __init__(self):
+            self.jobs = []
+        def add_job(self, func, trigger, **kwargs):
+            self.jobs.append(kwargs["id"])
+        def start(self):
+            self.running = True
+
+    fake = FakeScheduler()
+    monkeypatch.setattr(scheduler_module, "scheduler", fake)
+    object.__setattr__(settings, "auto_review", False)
+    object.__setattr__(settings, "auto_ingest_daily_activity_queue", True)
+    try:
+        scheduler_module.start_scheduler()
+    finally:
+        object.__setattr__(settings, "auto_review", True)
+        object.__setattr__(settings, "auto_ingest_daily_activity_queue", False)
+    assert fake.jobs == ["daily_activity_queue_cycle"]
+    assert fake.running is True
 
 def test_postgres_schema_and_sql_compatibility_adapter():
     from pulda.db import _postgres_schema, _postgres_sql, database_backend

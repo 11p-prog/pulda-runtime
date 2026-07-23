@@ -19,6 +19,57 @@ def _daily_activity_item_key(item: dict) -> str:
     )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
+def _insert_event_row(conn, text: str, source: str, role_override: str | None = None, **extra) -> int:
+    """Insert an Event on the caller's transaction without writing a separate audit row."""
+    c = classify(text)
+    role = role_override or c.role
+    now = now_kst().isoformat(timespec="seconds")
+    extra_fields = {
+        "project": None, "goal": None, "financial_impact": None,
+        "family_impact": None, "blocked_by": None, "defer_reason": None,
+        "next_review_at": None, "notion_page_id": None,
+        "occurred_on": today_kst().isoformat(),
+    }
+    extra_fields.update({key: value for key, value in extra.items() if key in extra_fields})
+    cur = conn.execute(
+        """INSERT INTO events
+        (text,source,role,area,kind,urgency,importance,status,captured_at,occurred_on,scheduled_at,due_date,
+         project,goal,financial_impact,family_impact,blocked_by,defer_reason,next_review_at,notion_page_id,
+         created_at,updated_at)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (text, source, role, c.area, c.kind, c.urgency, c.importance, "recorded", now,
+         extra_fields["occurred_on"], c.scheduled_at, c.due_date,
+         extra_fields["project"], extra_fields["goal"], extra_fields["financial_impact"],
+         extra_fields["family_impact"], extra_fields["blocked_by"], extra_fields["defer_reason"],
+         extra_fields["next_review_at"], extra_fields["notion_page_id"], now, now),
+    )
+    return cur.lastrowid
+
+def _daily_activity_result(conn, batch, *, receipt=None, created=False, added_count=0,
+                           replayed=False) -> dict:
+    items = conn.execute(
+        "SELECT * FROM daily_activity_items WHERE batch_id=? ORDER BY id", (batch["id"],)
+    ).fetchall()
+    event = conn.execute("SELECT * FROM events WHERE id=?", (batch["event_id"],)).fetchone()
+    envelopes = conn.execute(
+        "SELECT * FROM daily_activity_envelopes WHERE batch_id=? ORDER BY id", (batch["id"],)
+    ).fetchall()
+    result = {
+        "batch": dict(batch), "event": dict(event),
+        "items": [dict(row) for row in items],
+        "envelopes": [dict(row) for row in envelopes],
+        "created": created, "added_count": added_count, "replayed": replayed,
+    }
+    if receipt is not None:
+        result["receipt"] = dict(receipt)
+    return result
+
+def _merge_daily_activity_text(previous: str, incoming: str) -> str:
+    parts = [part for part in (previous or "").split("\n") if part]
+    if incoming.strip() and incoming.strip() not in parts:
+        parts.append(incoming.strip())
+    return "\n".join(parts)
+
 def get_daily_activity(activity_date: str, source_channel: str = "chatgpt") -> dict | None:
     with connect() as conn:
         batch = conn.execute(
@@ -65,7 +116,7 @@ def capture_daily_activity(
     data_class: str = "operational",
     source_block_id: str | None = None,
 ) -> dict:
-    """Register one date/channel activity Event and idempotently append items."""
+    """Atomically register one envelope, its date/channel Event, and its items."""
     try:
         date.fromisoformat(activity_date)
     except ValueError as exc:
@@ -81,11 +132,6 @@ def capture_daily_activity(
         "external_key": external_key, "data_class": data_class,
         "source_coverage": source_coverage, "access_gaps": access_gaps, "items": items,
     }, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-    replay = get_daily_activity_by_external_key(external_key)
-    if replay:
-        if replay["receipt"]["payload_hash"] != payload_hash:
-            raise ValueError("external_key already processed with a different payload")
-        return replay
     effective_channel = source_channel.strip() if data_class == "operational" else f"{source_channel.strip()}:test"
     for item in items:
         if item.get("item_type") not in DAILY_ACTIVITY_TYPES:
@@ -95,48 +141,57 @@ def capture_daily_activity(
         if not str(item.get("summary", "")).strip():
             raise ValueError("daily activity item summary is required")
 
-    existing = get_daily_activity(activity_date, effective_channel)
-    created = existing is None
-    if created:
-        event_id = create_event(
-            f"{activity_date} {'Test ' if data_class == 'test' else ''}ChatGPT Daily Activity",
-            source=f"daily_activity:{effective_channel}",
-            project="PRJ-PULDA-OS",
-        )
-        now = now_kst().isoformat(timespec="seconds")
-        try:
-            with connect() as conn:
-                cur = conn.execute(
-                    """INSERT INTO daily_activity_batches
-                    (event_id,activity_date,source_channel,external_key,source_coverage,access_gaps,privacy_reviewed,status,created_at,updated_at)
-                    VALUES(?,?,?,?,?,?,1,'registered',?,?)""",
-                    (event_id, activity_date, effective_channel,
-                     f"{effective_channel}:daily:{activity_date}",
-                     source_coverage.strip(), access_gaps.strip(), now, now),
-                )
-                batch_id = cur.lastrowid
-        except Exception:
-            delete_event(event_id)
-            raise
-    else:
-        event_id = existing["event"]["id"]
-        batch_id = existing["batch"]["id"]
-        now = now_kst().isoformat(timespec="seconds")
-        def merge_text(previous: str, incoming: str) -> str:
-            parts = [part for part in (previous or "").split("\n") if part]
-            if incoming.strip() and incoming.strip() not in parts:
-                parts.append(incoming.strip())
-            return "\n".join(parts)
-        with connect() as conn:
+    key = external_key.strip()
+    now = now_kst().isoformat(timespec="seconds")
+    with connect() as conn:
+        receipt = conn.execute(
+            "SELECT * FROM daily_activity_envelopes WHERE external_key=?", (key,)
+        ).fetchone()
+        if receipt:
+            if receipt["payload_hash"] != payload_hash:
+                raise ValueError("external_key already processed with a different payload")
+            batch = conn.execute(
+                "SELECT * FROM daily_activity_batches WHERE id=?", (receipt["batch_id"],)
+            ).fetchone()
+            return _daily_activity_result(
+                conn, batch, receipt=receipt, created=False, added_count=0, replayed=True
+            )
+
+        batch = conn.execute(
+            "SELECT * FROM daily_activity_batches WHERE activity_date=? AND source_channel=?",
+            (activity_date, effective_channel),
+        ).fetchone()
+        created = batch is None
+        if created:
+            event_id = _insert_event_row(
+                conn,
+                f"{activity_date} {'Test ' if data_class == 'test' else ''}ChatGPT Daily Activity",
+                source=f"daily_activity:{effective_channel}",
+                project="PRJ-PULDA-OS",
+            )
+            cur = conn.execute(
+                """INSERT INTO daily_activity_batches
+                (event_id,activity_date,source_channel,external_key,source_coverage,access_gaps,privacy_reviewed,status,created_at,updated_at)
+                VALUES(?,?,?,?,?,?,1,'registered',?,?)""",
+                (event_id, activity_date, effective_channel,
+                 f"{effective_channel}:daily:{activity_date}",
+                 source_coverage.strip(), access_gaps.strip(), now, now),
+            )
+            batch_id = cur.lastrowid
+            batch = conn.execute(
+                "SELECT * FROM daily_activity_batches WHERE id=?", (batch_id,)
+            ).fetchone()
+        else:
+            event_id = batch["event_id"]
+            batch_id = batch["id"]
             conn.execute(
                 """UPDATE daily_activity_batches
                 SET source_coverage=?, access_gaps=?, privacy_reviewed=1, updated_at=? WHERE id=?""",
-                (merge_text(existing["batch"]["source_coverage"], source_coverage),
-                 merge_text(existing["batch"]["access_gaps"], access_gaps), now, batch_id),
+                (_merge_daily_activity_text(batch["source_coverage"], source_coverage),
+                 _merge_daily_activity_text(batch["access_gaps"], access_gaps), now, batch_id),
             )
 
-    added = 0
-    with connect() as conn:
+        added = 0
         for item in items:
             item_key = item.get("item_key") or _daily_activity_item_key(item)
             cur = conn.execute(
@@ -154,12 +209,18 @@ def capture_daily_activity(
             """INSERT INTO daily_activity_envelopes
             (batch_id,external_key,data_class,source_block_id,payload_hash,added_count,status,processed_at)
             VALUES(?,?,?,?,?,?,'processed',?)""",
-            (batch_id, external_key.strip(), data_class, source_block_id, payload_hash, added, now),
+            (batch_id, key, data_class, source_block_id, payload_hash, added, now),
+        )
+        receipt = conn.execute(
+            "SELECT * FROM daily_activity_envelopes WHERE external_key=?", (key,)
+        ).fetchone()
+        batch = conn.execute(
+            "SELECT * FROM daily_activity_batches WHERE id=?", (batch_id,)
+        ).fetchone()
+        result = _daily_activity_result(
+            conn, batch, receipt=receipt, created=created, added_count=added, replayed=False
         )
     audit("capture_daily_activity", str(event_id), "success", f"added={added}")
-    result = get_daily_activity(activity_date, effective_channel)
-    receipt = next(row for row in result["envelopes"] if row["external_key"] == external_key.strip())
-    result.update({"created": created, "added_count": added, "receipt": receipt, "replayed": False})
     return result
 
 def _knowledge_source_dict(row) -> dict:
@@ -443,31 +504,8 @@ WORKSPACE_VIEWS = {
 
 
 def create_event(text: str, source: str = "manual_ui", role_override: str | None = None, **extra) -> int:
-    c = classify(text)
-    role = role_override or c.role
-    now = now_kst().isoformat(timespec="seconds")
-    extra_fields = {
-        "project": None, "goal": None, "financial_impact": None,
-        "family_impact": None, "blocked_by": None, "defer_reason": None,
-        "next_review_at": None, "notion_page_id": None,
-        "occurred_on": today_kst().isoformat(),
-    }
-    extra_fields.update({k: v for k, v in extra.items() if k in extra_fields})
     with connect() as conn:
-        cur = conn.execute(
-            """INSERT INTO events
-            (text,source,role,area,kind,urgency,importance,status,captured_at,occurred_on,scheduled_at,due_date,
-             project,goal,financial_impact,family_impact,blocked_by,defer_reason,next_review_at,notion_page_id,
-             created_at,updated_at)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-            (text,source,role,c.area,c.kind,c.urgency,c.importance,"recorded",now,extra_fields["occurred_on"],
-             c.scheduled_at,c.due_date,
-             extra_fields["project"], extra_fields["goal"], extra_fields["financial_impact"],
-             extra_fields["family_impact"], extra_fields["blocked_by"], extra_fields["defer_reason"],
-             extra_fields["next_review_at"], extra_fields["notion_page_id"],
-             now,now),
-        )
-        event_id = cur.lastrowid
+        event_id = _insert_event_row(conn, text, source, role_override, **extra)
     audit("create_event", str(event_id), "success", text)
     return event_id
 

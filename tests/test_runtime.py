@@ -301,6 +301,97 @@ def test_notion_queue_pull_registers_and_retries_idempotently(monkeypatch):
     assert first["event_ids"] == [first["processed"][0]["event_id"]]
     assert first["checkpoint"] == "notion-block-1"
 
+def test_daily_activity_rolls_back_event_batch_and_items_when_receipt_insert_fails():
+    activity_date = "2098-07-22"
+    with connect() as conn:
+        conn.execute(
+            """CREATE TRIGGER fail_daily_activity_receipt
+            BEFORE INSERT ON daily_activity_envelopes
+            BEGIN SELECT RAISE(ABORT, 'receipt insert failed'); END"""
+        )
+    try:
+        try:
+            capture_daily_activity(
+                activity_date=activity_date,
+                source_channel="chatgpt",
+                external_key=f"chatgpt:atomic-failure:{activity_date}",
+                privacy_reviewed=True,
+                items=[{"item_type": "work_result", "summary": "반드시 함께 롤백될 항목"}],
+            )
+            assert False, "receipt insertion failure must abort the whole capture"
+        except Exception as exc:
+            assert "receipt insert failed" in str(exc)
+    finally:
+        with connect() as conn:
+            conn.execute("DROP TRIGGER IF EXISTS fail_daily_activity_receipt")
+
+    assert get_daily_activity(activity_date, "chatgpt") is None
+    with connect() as conn:
+        event = conn.execute(
+            "SELECT id FROM events WHERE text=?",
+            (f"{activity_date} ChatGPT Daily Activity",),
+        ).fetchone()
+    assert event is None
+
+def test_daily_activity_replay_repairs_existing_batch_without_duplicate_items():
+    activity_date = "2098-07-23"
+    external_key = f"chatgpt:repair:{activity_date}"
+    summary = "처리 기록만 누락된 기존 항목"
+    event_id = create_event(
+        f"{activity_date} ChatGPT Daily Activity",
+        source="daily_activity:chatgpt",
+        project="PRJ-PULDA-OS",
+    )
+    now = datetime.now().isoformat(timespec="seconds")
+    item = {
+        "item_type": "work_result", "project": "PRJ-PULDA-OS",
+        "summary": summary, "source_ref": "CR-0015", "review_state": "register",
+    }
+    import pulda.service as service
+    with connect() as conn:
+        cur = conn.execute(
+            """INSERT INTO daily_activity_batches
+            (event_id,activity_date,source_channel,external_key,source_coverage,access_gaps,
+             privacy_reviewed,status,created_at,updated_at)
+            VALUES(?,?,?,?,?,?,1,'registered',?,?)""",
+            (event_id, activity_date, "chatgpt", f"chatgpt:daily:{activity_date}",
+             "existing batch", "", now, now),
+        )
+        batch_id = cur.lastrowid
+        conn.execute(
+            """INSERT INTO daily_activity_items
+            (batch_id,item_key,item_type,project,summary,source_ref,review_state,created_at,updated_at)
+            VALUES(?,?,?,?,?,?,?,?,?)""",
+            (batch_id, service._daily_activity_item_key(item), item["item_type"], item["project"],
+             item["summary"], item["source_ref"], item["review_state"], now, now),
+        )
+
+    repaired = capture_daily_activity(
+        activity_date=activity_date,
+        source_channel="chatgpt",
+        external_key=external_key,
+        source_coverage="existing batch",
+        privacy_reviewed=True,
+        items=[item],
+    )
+    assert repaired["created"] is False
+    assert repaired["event"]["id"] == event_id
+    assert repaired["added_count"] == 0
+    assert len(repaired["items"]) == 1
+    assert repaired["receipt"]["external_key"] == external_key
+
+    replayed = capture_daily_activity(
+        activity_date=activity_date,
+        source_channel="chatgpt",
+        external_key=external_key,
+        source_coverage="existing batch",
+        privacy_reviewed=True,
+        items=[item],
+    )
+    assert replayed["replayed"] is True
+    assert replayed["event"]["id"] == event_id
+    assert len(replayed["items"]) == 1
+
 def test_test_envelope_is_separate_from_operational_daily_event():
     operational = capture_daily_activity(
         activity_date="2026-07-23", source_channel="chatgpt",

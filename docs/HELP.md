@@ -112,6 +112,14 @@ still rule-based and there is no live LLM provider or human-review UI.
   a separate test Event. Successful pulls return `event_ids`, total
   `added_count`, `checkpoint`, and `errors`. The checkpoint prevents rescanning
   blocks already observed. Daily queue ingestion is independent of `AUTO_REVIEW`.
+- Runtime commits the Daily Activity Event, date/channel batch, typed items,
+  and the envelope processing record in one transaction. If any part fails,
+  none of that envelope is registered; a retry can safely process it again.
+- The dated recovery script
+  `scripts/repair_daily_activity_20260722.py` is only for the verified
+  2026-07-22 missing-processing-record incident. Run it without `--apply`
+  first. Its backup is written under the Git-ignored `data/backups` path, and
+  `--restore BACKUP_PATH` restores that scoped snapshot.
 
 ## Runtime database selection
 

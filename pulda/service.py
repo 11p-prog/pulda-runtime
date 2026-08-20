@@ -5,6 +5,7 @@ import hashlib
 from .timeutil import now_kst, today_kst, date_label
 from .db import connect, database_backend
 from .classifier import classify
+from .ai_provider import get_provider
 
 INTERPRETATION_FIELDS = {"role", "area", "kind", "urgency", "importance"}
 DAILY_ACTIVITY_TYPES = {"instruction", "decision", "work_result", "action_candidate", "hold"}
@@ -341,16 +342,31 @@ def _coerce_interpretation_value(field_name: str, value: str):
 def interpret_event(
     event_id: int,
     *,
-    model: str = "rule-based-v0",
+    model: str | None = None,
     prompt_version: str = "living-loop-v0.1",
     dna_version: str = "notion-2026-07-15",
-    confidence: float = 0.5,
+    confidence: float | None = None,
 ) -> dict:
-    """Create a versioned interpretation without overwriting the Event original."""
+    """Create a versioned interpretation without overwriting the Event original.
+
+    When `model` is left unset, the active AI provider (CR-0013 —
+    `ai_provider.get_provider()`) supplies the classification and its own
+    model/confidence. Passing an explicit `model` keeps the old deterministic
+    rule-engine path, e.g. for reproducible tests or manual relabeling.
+    """
     event = get_event(event_id)
     if not event:
         raise ValueError("event not found")
-    base = classify(event["text"])
+    if model is None:
+        interpretation = get_provider().interpret(event["text"])
+        base = interpretation.classification
+        model = interpretation.model
+        if confidence is None:
+            confidence = interpretation.confidence
+    else:
+        base = classify(event["text"])
+        if confidence is None:
+            confidence = 0.5
     values = {
         "role": base.role,
         "area": base.area,

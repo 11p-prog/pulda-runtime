@@ -63,8 +63,10 @@ reproducible backend loop is available through these endpoints:
 6. Create and interpret a comparable Event. Its `applied_rule_ids` shows whether
    the reusable correction affected the next interpretation.
 
-This is backend execution evidence, not user verification. The classifier is
-still rule-based and there is no live LLM provider or human-review UI.
+This is backend execution evidence, not user verification. An Anthropic Claude
+provider is now wired in and used automatically when `ANTHROPIC_API_KEY` is
+set (falls back to the rule-based classifier when it is not); there is still
+no human-review UI — corrections are only reachable through the API above.
 
 ## Capture and retrieve one knowledge source by API
 

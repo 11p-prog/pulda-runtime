@@ -83,10 +83,10 @@ class DeferIn(BaseModel):
     next_review_at: str | None = None
 
 class InterpretationIn(BaseModel):
-    model: str = "rule-based-v0"
+    model: str | None = None
     prompt_version: str = "living-loop-v0.1"
     dna_version: str = "notion-2026-07-15"
-    confidence: float = 0.5
+    confidence: float | None = None
 
 class CorrectionIn(BaseModel):
     field_name: str

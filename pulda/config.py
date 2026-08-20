@@ -32,5 +32,8 @@ class Settings:
     github_repository: str = os.getenv("GITHUB_REPOSITORY", "")
     github_branch: str = os.getenv("GITHUB_BRANCH", "main")
     daily_activity_ingest_token: str = os.getenv("PULDA_DAILY_ACTIVITY_INGEST_TOKEN", "")
+    anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "")
+    anthropic_model: str = os.getenv("PULDA_ANTHROPIC_MODEL", "claude-sonnet-5")
+    ai_provider: str = os.getenv("PULDA_AI_PROVIDER", "auto")
 
 settings = Settings()

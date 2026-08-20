@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- 2026-08-20 — CR-0013: added a real AI interpretation provider. New
+  `pulda/ai_provider.py` calls the Anthropic Claude Messages API directly
+  (no new dependency — reuses `requests`) and returns the same
+  `Classification` shape the rule engine produces, so `correction_rules`
+  and the rest of the Living Loop pipeline are unchanged. Selection is via
+  `PULDA_AI_PROVIDER` (`auto` default / `anthropic` / `rule-based`) and
+  `ANTHROPIC_API_KEY`: with no key set, `service.interpret_event()` falls
+  back to the deterministic rule engine automatically, so tests and
+  offline/dev runs stay reproducible with no network calls. `classify()`
+  itself is untouched. Added `tests/test_ai_provider.py` (provider
+  selection + response parsing/clamping, mocked HTTP — no live API calls).
+  Status: prepared locally, not yet deployed/verified in Runtime — see
+  `docs/cr/CR-0013.md`.
+
 - 2026-07-16 — Exposed the first backend Living Loop through API endpoints for
   versioned interpretation, human correction, outcome recording, and follow-up
   proposals. Added an API-boundary regression test proving that a reusable

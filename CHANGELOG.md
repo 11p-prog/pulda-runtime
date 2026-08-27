@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 2026-08-20 — CR-0013: Runtime-verified the Anthropic Claude provider on
+  the deployed app (`https://pulda-runtime.replit.app`, commit `928f1fc`).
+  Event 17 ("내일 오후 3시 병원 예약 확인") was interpreted live as
+  `model: "anthropic:claude-sonnet-5", confidence: 0.85, urgency: 3,
+  importance: 3` — distinct from the rule engine's fixed 2/2 defaults,
+  confirming a real Claude call rather than the fallback path. CR-0013's
+  "AI/LLM interpretation layer not connected" blocker is resolved; see
+  `docs/cr/CR-0013.md` for what remains open on the CR as a whole.
+
 - 2026-08-20 — CR-0013: added a real AI interpretation provider. New
   `pulda/ai_provider.py` calls the Anthropic Claude Messages API directly
   (no new dependency — reuses `requests`) and returns the same

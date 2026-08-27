@@ -54,8 +54,8 @@ Replit, Codex, Claude Code, Copilot 등은 교체 가능한 Builder다. 특정 �
 - export/import/restore 절차와 최근 검증 결과
 - 미완료 작업, 오류, 위험, 다음 최소 행동
 
-## 2026-07-14 상태
+## 2026-07-14 Git 표준 업무 흐름
 
-원격 `main`의 commit `3a7b272aa326b8db2d5ac8319b95f0e706a4a8cd`는 확인되었다. 다만 일부 기준 파일이 완성본 대신 패치 지시문으로 덮어써져 저장소 정합화가 필요하다. ChatGPT의 GitHub 연결은 원격 확인용 읽기 경로로 사용하고, 변경은 로컬 저장소에 적용한 뒤 사용자가 GitHub Desktop으로 검토·commit·push한다. AI는 push 후 원격 commit과 변경 파일을 재확인한다.
+ChatGPT의 GitHub 연결은 원격 기준 확인용 읽기 경로로만 사용한다. 일반적인 변경은 사용자의 로컬 저장소 폴더에서 준비하고 검증한다. 사용자가 GitHub Desktop에서 diff를 검토한 뒤 commit·push한다. AI는 원격 commit과 변경 파일을 다시 읽어 반영을 확인하고 Notion CR 상태를 정합화한다.
 
-CR-0013은 `Approved`이며 Runtime 구현은 아직 시작하지 않았다. 다음 작업은 이 인계 묶음으로 기준 파일을 복구한 뒤 전체 테스트를 실행하고 원격 정합화를 확인하는 것이다.
+로컬 변경 또는 패치 생성만으로는 `Implemented`가 아니다. 원격 commit과 자동테스트 증거가 확인되어야 한다. 긴급패치 ZIP은 해당 세션이 로컬 저장소에 접근할 수 없을 때만 사용하는 보조 인계수단이다.

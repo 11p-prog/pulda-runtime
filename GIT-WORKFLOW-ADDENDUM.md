@@ -1,5 +1,7 @@
 # Git workflow addendum — user decision 2026-07-14
 
+Status: Applied — all three insertions are in place (`docs/governance/OPERATING-MODEL.md` § Standard Git change workflow, `AGENTS.md` § Change rules, `docs/HANDOFF.md` final section). Kept as historical record only.
+
 Insert the following section into `docs/governance/OPERATING-MODEL.md` before its final `Updated` line:
 
 ## Standard Git change workflow

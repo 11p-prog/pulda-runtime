@@ -15,22 +15,33 @@
   tailwind.config = {
     theme: { extend: {
       colors: {
-        "surface-bright": "#fcf8fb", "surface": "#fcf8fb", "background": "#fcf8fb",
-        "surface-container-lowest": "#ffffff", "surface-container-low": "#f6f3f5",
-        "surface-container": "#f0edef", "surface-container-high": "#eae7ea",
-        "on-surface": "#1b1b1d", "on-surface-variant": "#414755",
-        "outline-variant": "#c1c6d7",
-        "primary": "#0058bc", "on-primary": "#ffffff",
-        "secondary-container": "#dfdfe4", "on-secondary-container": "#616267",
-        "error": "#ba1a1a", "on-error": "#ffffff",
-        "success": "#1b7a3d", "success-container": "#d7f2e0",
-        "warning": "#9e6b00", "warning-container": "#fff0c2",
+        "surface-bright": "rgb(var(--pulda-surface-bright) / <alpha-value>)",
+        "surface": "rgb(var(--pulda-surface) / <alpha-value>)",
+        "background": "rgb(var(--pulda-background) / <alpha-value>)",
+        "surface-container-lowest": "rgb(var(--pulda-surface-container-lowest) / <alpha-value>)",
+        "surface-container-low": "rgb(var(--pulda-surface-container-low) / <alpha-value>)",
+        "surface-container": "rgb(var(--pulda-surface-container) / <alpha-value>)",
+        "surface-container-high": "rgb(var(--pulda-surface-container-high) / <alpha-value>)",
+        "on-surface": "rgb(var(--pulda-on-surface) / <alpha-value>)",
+        "on-surface-variant": "rgb(var(--pulda-on-surface-variant) / <alpha-value>)",
+        "outline-variant": "rgb(var(--pulda-outline-variant) / <alpha-value>)",
+        "primary": "rgb(var(--pulda-primary) / <alpha-value>)",
+        "on-primary": "rgb(var(--pulda-on-primary) / <alpha-value>)",
+        "secondary-container": "rgb(var(--pulda-secondary-container) / <alpha-value>)",
+        "on-secondary-container": "rgb(var(--pulda-on-secondary-container) / <alpha-value>)",
+        "error": "rgb(var(--pulda-error) / <alpha-value>)",
+        "on-error": "rgb(var(--pulda-on-error) / <alpha-value>)",
+        "success": "rgb(var(--pulda-success) / <alpha-value>)",
+        "success-container": "rgb(var(--pulda-success-container) / <alpha-value>)",
+        "warning": "rgb(var(--pulda-warning) / <alpha-value>)",
+        "warning-container": "rgb(var(--pulda-warning-container) / <alpha-value>)",
       },
       borderRadius: { DEFAULT: "0.25rem", lg: "0.5rem", xl: "0.75rem", full: "9999px" },
       fontFamily: { sans: ["Inter"] },
     } },
   }
 </script>
+{% include "_theme.html" %}
 </head>
 <body class="bg-surface-bright text-on-surface font-sans overflow-x-hidden">
 <div class="flex min-h-screen w-full relative">
@@ -55,11 +66,17 @@
       <a class="flex items-center gap-3 px-4 py-3 bg-secondary-container text-on-secondary-container rounded-xl text-[13px] font-medium" href="/projects">
         <span class="material-symbols-outlined">folder_open</span> 프로젝트
       </a>
+      <a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-low transition-colors rounded-xl text-[13px] font-medium" href="/review">
+        <span class="material-symbols-outlined">fact_check</span> 리뷰
+      </a>
+      <a class="flex items-center gap-3 px-4 py-3 text-on-surface-variant hover:bg-surface-container-low transition-colors rounded-xl text-[13px] font-medium" href="/settings">
+        <span class="material-symbols-outlined">settings</span> 설정
+      </a>
     </div>
 
     <div class="mt-auto px-4 flex items-center gap-3 py-4 border-t border-outline-variant/10">
       <span class="w-2.5 h-2.5 rounded-full {{ 'bg-success' if notion_status.ok else 'bg-error' }}"></span>
-      <div>
+      <div class="flex-1">
         <p class="text-[12px] font-semibold">Notion 연동</p>
         {% if notion_status.ok %}
         <p class="text-[11px] text-on-surface-variant">{{ notion_status.identity.workspace_name }} 연결됨</p>
@@ -67,6 +84,7 @@
         <p class="text-[11px] text-error">연결 확인 필요</p>
         {% endif %}
       </div>
+      {% include "_theme_toggle.html" %}
     </div>
   </nav>
 

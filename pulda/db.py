@@ -245,6 +245,10 @@ def _migrate_sqlite(conn: sqlite3.Connection) -> None:
     review_columns = {row[1] for row in conn.execute("PRAGMA table_info(reviews)").fetchall()}
     if "reflection" not in review_columns:
         conn.execute("ALTER TABLE reviews ADD COLUMN reflection TEXT")
+    if "edited_summary" not in review_columns:
+        conn.execute("ALTER TABLE reviews ADD COLUMN edited_summary TEXT")
+    if "approved_at" not in review_columns:
+        conn.execute("ALTER TABLE reviews ADD COLUMN approved_at TEXT")
     conn.execute("UPDATE events SET captured_at=COALESCE(captured_at, created_at)")
     conn.execute("UPDATE events SET occurred_on=COALESCE(occurred_on, substr(created_at,1,10))")
     conn.execute("UPDATE events SET legacy_status=status, status='recorded' WHERE status IN ('inbox','planned')")

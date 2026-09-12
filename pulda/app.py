@@ -13,6 +13,7 @@ from .service import (
     create_event, list_events, update_status, today_plan, build_review, latest_review, health,
     get_event, update_event, defer_event, attention_items, delete_event, soft_delete_event,
     life_balance, decision_support, operations_summary, save_reflection,
+    has_reviewable_data, approve_review, latest_audit,
     distinct_projects, context_workspace, context_events, calendar_activity, review_for_date,
     add_attachment, get_attachment, group_events_by_date,
     interpret_event, correct_interpretation, record_outcome, propose_follow_up,
@@ -439,6 +440,53 @@ def reflection_action(text: str = Form(...)):
     except ValueError as e:
         raise HTTPException(400, str(e))
     return RedirectResponse("/", status_code=303)
+
+@app.get("/review", response_class=HTMLResponse)
+def review_page(request: Request):
+    """Standalone daily-review screen. The draft summary is rule-based
+    (counts + lists, see build_review()) — presented honestly as a draft to
+    check, not as an "AI" interpretation, since no model call produces it.
+    Reviewing means the user reads the draft, may correct the text, and
+    records feedback before it counts as approved."""
+    today = today_kst().isoformat()
+    review = review_for_date(today)
+    return templates.TemplateResponse("review.html", {
+        "request": request,
+        "page": "review",
+        "today": today,
+        "review": review,
+        "can_generate": has_reviewable_data(),
+    })
+
+@app.post("/review/approve")
+def review_approve_action(review_date: str = Form(...), edited_summary: str = Form(""), feedback: str = Form("")):
+    try:
+        approve_review(review_date, edited_summary.strip() or None, feedback.strip() or None)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return RedirectResponse("/review", status_code=303)
+
+@app.get("/settings", response_class=HTMLResponse)
+def settings_page(request: Request):
+    """연동 관리: connection status, last sync, and a manual sync trigger for
+    Notion/GitHub — the same actions the home sidebar already exposes,
+    surfaced here with their last-run result instead of just a status dot."""
+    try:
+        notion_status = check_notion()
+    except Exception as e:
+        notion_status = {"ok": False, "error": str(e)}
+    try:
+        github_status = check_github()
+    except Exception as e:
+        github_status = {"ok": False, "error": str(e)}
+    return templates.TemplateResponse("settings.html", {
+        "request": request,
+        "page": "settings",
+        "notion_status": notion_status,
+        "github_status": github_status,
+        "notion_last_sync": latest_audit("sync_notion"),
+        "github_last_sync": latest_audit("sync_github"),
+    })
 
 @app.post("/sync/notion")
 def notion_action():

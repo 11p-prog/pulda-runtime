@@ -896,6 +896,46 @@ def save_reflection(text: str, review_date: str | None = None) -> dict:
     audit("save_reflection", review_date, "success", text[:80])
     return dict(row)
 
+def has_reviewable_data() -> bool:
+    """Whether there is anything at all to review yet. Used to hide the
+    review generate button and empty-state copy entirely on a fresh
+    workspace, instead of showing a dead-end button/placeholder."""
+    with connect() as conn:
+        row = conn.execute("SELECT count(*) c FROM events WHERE deleted_at IS NULL").fetchone()
+    return row["c"] > 0
+
+def approve_review(review_date: str, edited_summary: str | None, feedback: str | None) -> dict:
+    """The review flow is not 'generate a summary and be done' — the user
+    must actively review the generated draft, optionally correct it, and
+    record feedback before it counts as approved. `edited_summary` is the
+    user's corrected text (None keeps the generated draft as-is); `feedback`
+    reuses the existing `reflection` column, kept separate from the
+    corrected text itself so both the original interpretation and the
+    user's correction/comment remain visible afterwards."""
+    review_date = review_date or today_kst().isoformat()
+    now = now_kst().isoformat(timespec="seconds")
+    with connect() as conn:
+        existing = conn.execute("SELECT id FROM reviews WHERE review_date=?", (review_date,)).fetchone()
+        if not existing:
+            raise ValueError("no review for that date yet — generate the daily review first")
+        conn.execute(
+            "UPDATE reviews SET edited_summary=?, reflection=?, approved_at=? WHERE review_date=?",
+            (edited_summary, feedback, now, review_date),
+        )
+        row = conn.execute("SELECT * FROM reviews WHERE review_date=?", (review_date,)).fetchone()
+    audit("approve_review", review_date, "success", (feedback or "")[:80])
+    return dict(row)
+
+def latest_audit(action: str) -> dict | None:
+    """Most recent audit_log row for a given action — used by the settings
+    screen to show a real last-sync time/result instead of a decorative
+    status dot."""
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT * FROM audit_log WHERE action=? ORDER BY created_at DESC LIMIT 1", (action,)
+        ).fetchone()
+    return dict(row) if row else None
+
 # role/area -> life-balance bucket. Best-effort mapping given the current
 # domain model (role: 가족/회사/성당/개인, area includes 건강/학습/재무/...).
 # Not a precise ontology — revisit if/when the domain model gains explicit

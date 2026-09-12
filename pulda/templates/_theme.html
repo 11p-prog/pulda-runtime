@@ -1,0 +1,65 @@
+<style id="pulda-theme-tokens">
+  :root {
+    --pulda-surface-bright: 252 248 251; --pulda-surface: 252 248 251; --pulda-background: 252 248 251;
+    --pulda-surface-container-lowest: 255 255 255; --pulda-surface-container-low: 246 243 245;
+    --pulda-surface-container: 240 237 239; --pulda-surface-container-high: 234 231 234;
+    --pulda-surface-container-highest: 228 226 228;
+    --pulda-on-surface: 27 27 29; --pulda-on-surface-variant: 65 71 85; --pulda-on-background: 27 27 29;
+    --pulda-outline: 113 119 134; --pulda-outline-variant: 193 198 215;
+    --pulda-primary: 0 88 188; --pulda-on-primary: 255 255 255; --pulda-primary-container: 0 112 235;
+    --pulda-secondary: 93 94 99; --pulda-on-secondary: 255 255 255; --pulda-secondary-container: 223 223 228;
+    --pulda-on-secondary-container: 97 98 103;
+    --pulda-tertiary: 158 61 0; --pulda-on-tertiary: 255 255 255;
+    --pulda-tertiary-fixed: 255 219 204; --pulda-on-tertiary-fixed: 53 16 0;
+    --pulda-error: 186 26 26; --pulda-on-error: 255 255 255; --pulda-error-container: 255 218 214; --pulda-on-error-container: 147 0 10;
+    --pulda-success: 27 122 61; --pulda-success-container: 215 242 224;
+    --pulda-warning: 158 107 0; --pulda-warning-container: 255 240 194;
+  }
+  html[data-theme="dark"] {
+    --pulda-surface-bright: 20 22 26; --pulda-surface: 20 22 26; --pulda-background: 20 22 26;
+    --pulda-surface-container-lowest: 16 18 21; --pulda-surface-container-low: 24 27 32;
+    --pulda-surface-container: 30 33 39; --pulda-surface-container-high: 38 42 49;
+    --pulda-surface-container-highest: 46 51 59;
+    --pulda-on-surface: 230 228 226; --pulda-on-surface-variant: 175 180 192; --pulda-on-background: 230 228 226;
+    --pulda-outline: 140 146 158; --pulda-outline-variant: 66 71 82;
+    --pulda-primary: 100 170 255; --pulda-on-primary: 8 30 60; --pulda-primary-container: 20 70 140;
+    --pulda-secondary: 180 182 190; --pulda-on-secondary: 30 31 34; --pulda-secondary-container: 55 56 61;
+    --pulda-on-secondary-container: 210 212 218;
+    --pulda-tertiary: 255 140 90; --pulda-on-tertiary: 60 20 0;
+    --pulda-tertiary-fixed: 90 40 10; --pulda-on-tertiary-fixed: 255 219 204;
+    --pulda-error: 255 120 120; --pulda-on-error: 60 0 0; --pulda-error-container: 100 20 20; --pulda-on-error-container: 255 218 214;
+    --pulda-success: 110 210 150; --pulda-success-container: 20 60 40;
+    --pulda-warning: 255 200 90; --pulda-warning-container: 70 50 10;
+  }
+  body { background: rgb(var(--pulda-background)); }
+  input, textarea, select { color-scheme: light; }
+  html[data-theme="dark"] input, html[data-theme="dark"] textarea, html[data-theme="dark"] select { color-scheme: dark; }
+</style>
+<script>
+  (function () {
+    var saved = null;
+    try { saved = localStorage.getItem('pulda_theme'); } catch (e) {}
+    var theme = saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    document.documentElement.setAttribute('data-theme', theme);
+  })();
+</script>
+<script id="pulda-theme-behavior">
+  document.addEventListener('DOMContentLoaded', function () {
+    var button = document.getElementById('pulda-theme-toggle');
+    if (!button) return;
+    var icon = button.querySelector('.material-symbols-outlined');
+    function sync() {
+      var dark = document.documentElement.getAttribute('data-theme') === 'dark';
+      button.setAttribute('aria-label', dark ? '밝은 테마로 전환' : '어두운 테마로 전환');
+      button.title = button.getAttribute('aria-label');
+      if (icon) icon.textContent = dark ? 'light_mode' : 'dark_mode';
+    }
+    button.addEventListener('click', function () {
+      var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      try { localStorage.setItem('pulda_theme', next); } catch (e) {}
+      sync();
+    });
+    sync();
+  });
+</script>

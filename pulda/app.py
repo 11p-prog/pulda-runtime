@@ -24,7 +24,7 @@ from .service import (
 )
 from .connectors import (
     sync_notion, sync_github, check_notion, check_github,
-    pull_notion_daily_activities,
+    pull_notion_daily_activities, pull_notion_daily_log,
 )
 from .scheduler import start_scheduler
 from .config import settings
@@ -664,6 +664,13 @@ def integrations_notion_check():
 def integrations_notion_daily_activities_pull(request: Request):
     _require_daily_activity_token(request)
     result = pull_notion_daily_activities()
+    if not result["ok"]:
+        raise HTTPException(400, result)
+    return result
+
+@app.post("/integrations/notion/daily-log/pull")
+def integrations_notion_daily_log_pull(month: str | None = None):
+    result = pull_notion_daily_log(month=month)
     if not result["ok"]:
         raise HTTPException(400, result)
     return result

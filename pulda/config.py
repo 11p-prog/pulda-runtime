@@ -25,6 +25,7 @@ class Settings:
     notion_parent_page_id: str = os.getenv("NOTION_PARENT_PAGE_ID", "")
     notion_sync_page_id: str = os.getenv("NOTION_SYNC_PAGE_ID", "")
     notion_daily_activity_queue_page_id: str = os.getenv("NOTION_DAILY_ACTIVITY_QUEUE_PAGE_ID", "")
+    notion_daily_log_data_source_id: str = os.getenv("NOTION_DAILY_LOG_DATA_SOURCE_ID", "")
     auto_ingest_daily_activity_queue: bool = _bool("AUTO_INGEST_DAILY_ACTIVITY_QUEUE", False)
     daily_activity_pull_hour: int = int(os.getenv("DAILY_ACTIVITY_PULL_HOUR", "22"))
     daily_activity_pull_minute: int = int(os.getenv("DAILY_ACTIVITY_PULL_MINUTE", "40"))

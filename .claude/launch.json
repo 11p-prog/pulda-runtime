@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pulda-integration-preview",
+      "runtimeExecutable": "D:\\01_개발프로젝트\\pulda-runtime-integration\\.venv\\Scripts\\python.exe",
+      "runtimeArgs": [
+        "-c",
+        "import os; os.chdir(r'D:\\01_개발프로젝트\\pulda-runtime-integration'); os.environ['PULDA_PORT']='8010'; os.environ['PULDA_HOST']='127.0.0.1'; import pulda.app as m; m.main()"
+      ],
+      "port": 8010
+    }
+  ]
+}

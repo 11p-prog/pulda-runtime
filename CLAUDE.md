@@ -42,3 +42,9 @@
 ## 참고
 
 - 이 저장소(풀다 OS) 자체의 엔지니어링/거버넌스 규칙은 [`AGENTS.md`](AGENTS.md)를 따른다.
+- **2026-09-18 git 히스토리 조정(reconciliation) 완료** — 로컬 main/origin/integration
+  브랜치를 병합해 이 D 드라이브 폴더를 단일 canonical 사본으로 정리함(Replit은 보조
+  환경으로 격하). 완료 기록·검증 근거·아직 미결정으로 남긴 항목(GitHub의 `origin/backup/*`
+  브랜치 삭제 여부, `pulda-runtime-integration` worktree 최신화)은
+  [`CLAUDE-CODE-RECONCILIATION-REVIEW.md`](CLAUDE-CODE-RECONCILIATION-REVIEW.md)의
+  "Resolution — 2026-09-18" 절 참고. 이 저장소에서 새 작업을 시작하기 전에 한 번 확인할 것.

@@ -185,3 +185,60 @@ Please return one Markdown report with these sections:
 ## Stop condition
 
 After producing the report, stop. Do not begin reconciliation until the user has shared the report back with the Replit agent and explicitly approved a final integration plan.
+
+## Resolution — 2026-09-18 (executed, not just reviewed)
+
+The user explicitly approved going further than a read-only review: reconcile
+around this D-drive local folder as the single canonical copy (Claude Code
+centralized; Replit's two accounts had exhausted credits arguing over which
+was authoritative), retiring Replit as the primary environment going forward.
+
+What was actually checked before merging (contradicts the facts-gathering
+table above, which described the *Replit* workspace's local `main` vs
+`origin/main` as having no common ancestor): **this folder's local `main`**
+and `origin/main` shared a real merge base (`a5e6eaa2`) and were a simple
+4-commits-vs-2-commits divergence, not an unrelated-history situation. The
+apparent danger in the original review request was specific to the Replit
+workspace, not to this folder.
+
+Sequence executed:
+1. Backup tags created at pre-merge tips of `main` and
+   `integration/screen-updates-20260911` (since deleted — see below).
+2. Committed pending working-tree changes in both `pulda-runtime` and the
+   `pulda-runtime-integration` worktree.
+3. Merged `origin/main` → `main` (no conflicts — disjoint files: docs/chore
+   commits vs review commits).
+4. Merged `integration/screen-updates-20260911` → `main` (no conflicts —
+   disjoint files: docs vs `pulda/*.py` + templates).
+5. Pushed `main` to `origin/main` (fast-forward, `b70a3b4..f3d5e37`).
+6. Verified with `pytest`: two runs surfaced two *different* failing-test
+   sets, which pointed to environment causes rather than a merge regression
+   — first run used the system-wide Python (version-mismatched against
+   `requirements.txt`: installed `fastapi==0.140.13`/`starlette==1.3.1` vs
+   pinned `0.116.1`), second run used `pulda-runtime-integration/.venv`
+   (correct pinned versions) but lacked `pulda-runtime`'s own `.env`, so
+   Notion-token-dependent tests failed. No evidence of an actual code
+   regression from the merge.
+7. Deleted branches/tags confirmed merged into `main`: local
+   `backup/claude-local-main-20260911`, `backup/github-origin-main-20260911`;
+   remote `origin/integration/screen-updates-20260911`,
+   `origin/comparison/replit-snapshot-20260911`; local tags
+   `backup/main-before-reconcile-20260918`,
+   `backup/integration-before-reconcile-20260918`.
+
+**Deliberately left in place — needs a decision during actual project work,
+not during folder cleanup:**
+- `origin/backup/claude-local-main-20260911` and
+  `origin/backup/github-origin-main-20260911` (GitHub remote branches) are
+  still on GitHub. They're fully merged into `main` and safe to delete, but
+  the user asked to defer the call to whenever real project work in this
+  repo resumes, rather than decide it during a folder-organization pass.
+  **Check whether these are still needed before starting new work here** —
+  if nothing has referenced them since 2026-09-18, they can be deleted with
+  `git push origin --delete backup/claude-local-main-20260911
+  backup/github-origin-main-20260911`.
+- The `pulda-runtime-integration` worktree (checked out on
+  `integration/screen-updates-20260911`) still exists on disk even though
+  that branch is fully merged into `main`. It was kept per user instruction.
+  When picking up new work there, pull/rebase onto current `main` first —
+  don't assume the worktree branch is still the frontier.

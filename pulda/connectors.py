@@ -2,7 +2,7 @@ import base64
 import json
 import requests
 from .config import settings
-from .service import audit, latest_review, capture_daily_activity
+from .service import audit, latest_review, capture_daily_activity, create_event, update_status
 from .connector_client import connector_proxy, is_connector_available
 
 def check_notion() -> dict:
@@ -201,6 +201,115 @@ def pull_notion_daily_activities() -> dict:
                 "event_ids": sorted({row["event_id"] for row in processed}),
                 "added_count": sum(row["added_count"] for row in processed),
                 "errors": [{"error": str(e)}], "error": str(e)}
+
+# Property/status-option ids for the property-based Notion "daily log"
+# database (distinct from the JSON-envelope queue above). Notion keeps these
+# ids stable across column renames, so matching by id survives the source DB
+# being restyled -- only a deleted/recreated property or status option would
+# require updating them.
+_DAILY_LOG_TITLE_PROP_ID = "title"
+_DAILY_LOG_DATE_PROP_ID = "u%7CdG"
+_DAILY_LOG_STATUS_PROP_ID = "Wg%5Dv"
+_DAILY_LOG_CATEGORY_PROP_ID = "%40CEi"
+_DAILY_LOG_MEMO_PROP_ID = "rQoi"
+_DAILY_LOG_STATUS_MAP = {
+    "1b1f087d-08ff-4135-b3f8-50ad6ea4347d": "done",
+    "3e72b76f-a917-4cbf-ad71-2ba596834b37": "doing",
+    "14586de4-b42a-43c3-947c-191010ade2ef": "recorded",
+}
+
+def _prop_by_id(props: dict, prop_id: str) -> dict | None:
+    """Notion page properties are keyed by (renameable) name, with the
+    stable id tucked inside each value -- so looking up by id means scanning
+    values, not a dict[prop_id] access."""
+    for value in props.values():
+        if value.get("id") == prop_id:
+            return value
+    return None
+
+def pull_notion_daily_log(month: str | None = None) -> dict:
+    """Import rows from the property-based Notion daily-log database (title/
+    date/status/category/memo columns) into Events, one Event per row.
+
+    Distinct from pull_notion_daily_activities: that one parses JSON
+    envelopes out of page blocks; this one queries a Notion database's rows
+    directly via the Data Sources API. Idempotent via events.notion_page_id
+    (a page already imported is skipped on re-run), so it's safe to call
+    repeatedly as the source database keeps changing.
+    """
+    data_source_id = settings.notion_daily_log_data_source_id
+    if not data_source_id:
+        return {"ok": False, "error": "NOTION_DAILY_LOG_DATA_SOURCE_ID missing"}
+    if not settings.notion_token:
+        return {"ok": False, "error": "Notion not connected: set up NOTION_TOKEN"}
+
+    headers = {
+        "Authorization": f"Bearer {settings.notion_token}",
+        "Notion-Version": "2025-09-03",
+        "Content-Type": "application/json",
+    }
+
+    results = []
+    cursor = None
+    try:
+        while True:
+            payload = {"page_size": 100}
+            if cursor:
+                payload["start_cursor"] = cursor
+            r = requests.post(
+                f"https://api.notion.com/v1/data_sources/{data_source_id}/query",
+                headers=headers, json=payload, timeout=20,
+            )
+            r.raise_for_status()
+            body = r.json()
+            results.extend(body.get("results", []))
+            if not body.get("has_more"):
+                break
+            cursor = body.get("next_cursor")
+    except Exception as e:
+        audit("pull_notion_daily_log", data_source_id, "failed", str(e))
+        return {"ok": False, "error": str(e)}
+
+    from .db import connect
+    with connect() as conn:
+        existing_ids = {
+            row["notion_page_id"] for row in conn.execute(
+                "SELECT notion_page_id FROM events WHERE notion_page_id IS NOT NULL"
+            ).fetchall()
+        }
+
+    imported, skipped = 0, 0
+    for row in results:
+        page_id = row.get("id")
+        if not page_id or page_id in existing_ids:
+            skipped += 1
+            continue
+        props = row.get("properties", {})
+        date_val = ((_prop_by_id(props, _DAILY_LOG_DATE_PROP_ID) or {}).get("date") or {}).get("start")
+        if month and (not date_val or not date_val.startswith(month)):
+            continue
+        title_parts = (_prop_by_id(props, _DAILY_LOG_TITLE_PROP_ID) or {}).get("title", [])
+        title = "".join(part.get("plain_text", "") for part in title_parts).strip()
+        if not title:
+            skipped += 1
+            continue
+        memo_parts = (_prop_by_id(props, _DAILY_LOG_MEMO_PROP_ID) or {}).get("rich_text", [])
+        memo = "".join(part.get("plain_text", "") for part in memo_parts).strip()
+        text = f"{title} — {memo}" if memo else title
+        category = ((_prop_by_id(props, _DAILY_LOG_CATEGORY_PROP_ID) or {}).get("select") or {}).get("name")
+        status_id = ((_prop_by_id(props, _DAILY_LOG_STATUS_PROP_ID) or {}).get("status") or {}).get("id")
+        status = _DAILY_LOG_STATUS_MAP.get(status_id, "recorded")
+
+        event_id = create_event(
+            text, source="notion_daily_log", project=category,
+            occurred_on=date_val, notion_page_id=page_id,
+        )
+        if status != "recorded":
+            update_status(event_id, status)
+        imported += 1
+
+    audit("pull_notion_daily_log", data_source_id, "success", f"imported={imported}")
+    return {"ok": True, "imported": imported, "skipped": skipped, "total_fetched": len(results)}
 
 def _github_request(method: str, path: str, use_connector: bool, json_body: dict | None = None,
                      params: dict | None = None):

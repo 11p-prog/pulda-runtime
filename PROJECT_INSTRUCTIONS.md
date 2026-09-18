@@ -1,5 +1,7 @@
 # Pulda OS Project Instructions
 
+> **[참고 자료 — 구 GPT 체제, 2026-09-17부터 격하]** 이 프로젝트의 실질적 상위 규칙은 이제 `CLAUDE.md`입니다. 여기 적힌 내용과 충돌하면 `CLAUDE.md`를 따르세요. (참고: 12번이 언급하는 `pulda-governance` 스킬은 현재 존재하지 않습니다.)
+
 Copy this content into the ChatGPT project's instructions. Keep this file as its versioned source.
 
 1. 인간은 창조자·전달자·행동의 주체이며, AI는 제자·감시자·조력자다.

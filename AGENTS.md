@@ -1,5 +1,7 @@
 # Pulda Runtime Agent Rules
 
+> **[참고 자료 — 구 GPT 체제, 2026-09-17부터 격하]** 이 프로젝트의 실질적 상위 규칙은 이제 `CLAUDE.md`입니다. 이 문서와 `CLAUDE.md`가 충돌하면 `CLAUDE.md`를 따르세요. 이 문서는 아직 이관되지 않은 세부 규칙의 참고용으로만 남겨둡니다.
+
 ## Mandatory bootstrap
 
 Before any Pulda work:
